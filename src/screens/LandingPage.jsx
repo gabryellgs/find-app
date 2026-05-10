@@ -1,4 +1,4 @@
-import { ScrollView, SafeAreaView, StatusBar } from "react-native";
+import { ScrollView, SafeAreaView, StatusBar, StyleSheet } from "react-native";
 
 import NavBar from "../components/landing/NavBar";
 import HeroSection from "../components/landing/HeroSection";
@@ -15,56 +15,40 @@ const colors = {
   primary: "#90dbf4",
 };
 
-export default function LandingPage({
-  onLogin,
-  onRegister,
-}) {
+export default function LandingPage({ navigation }) {
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar
-        barStyle="dark-content"
-        backgroundColor={colors.primary}
-      />
+      <StatusBar barStyle="dark-content" backgroundColor={colors.primary} />
 
-      <ScrollView
-        style={styles.scrollView}
-        showsVerticalScrollIndicator={false}
-      >
+      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
         <NavBar
-          onLogin={onLogin}
-          onRegister={onRegister}
+          onLogin={() => navigation.navigate("login")}
+          onRegister={() => navigation.navigate("register")}
         />
-
         <HeroSection
-          onRegister={onRegister}
+          onRegister={() => navigation.navigate("register")}
         />
-
         <SocialProofSection />
-
         <BenefitsSection />
-
         <DemoSection />
-
         <DifferentialsSection />
-
         <TestimonialsSection />
-
-        <CTASection />
-
+        <CTASection
+          onEnterApp={() => navigation.navigate("register")}
+        />
         <Footer />
       </ScrollView>
     </SafeAreaView>
   );
 }
 
-const styles = {
+const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.bg,
   },
-
   scrollView: {
     flex: 1,
     backgroundColor: colors.bg,
   },
-};
+});

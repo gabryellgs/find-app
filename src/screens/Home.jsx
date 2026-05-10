@@ -1,89 +1,76 @@
-import { View, Text, TouchableOpacity, StyleSheet, Dimensions } from 'react-native';
-import LogoFind from './LogoFind';
+import React from "react";
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, StatusBar } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import HomeHeader from "../components/home/HomeHeader";
+import SearchBar from "../components/home/SearchBar";
+import CategoryList from "../components/home/CategoryList";
+import StatsRow from "../components/home/StatsRow";
+import ItemCard from "../components/home/ItemCard";
 
-const { width: screenWidth } = Dimensions.get('window');
-const isMobile = screenWidth < 768;
+const items = [
+  {
+    icon: "bag-handle", iconColor: "#0a7a3e", iconBg: "#e1f9ed",
+    title: "Carteira preta — Couro", location: "Copacabana, RJ",
+    time: "há 2h", status: "Encontrado",
+    badgeStyle: { bg: "#e1f9ed", text: "#0a7a3e" },
+  },
+  {
+    icon: "phone-portrait", iconColor: "#b32e29", iconBg: "#fdecea",
+    title: "iPhone 15 Pro — Preto", location: "Pinheiros, SP",
+    time: "há 5h", status: "Perdido",
+    badgeStyle: { bg: "#fdecea", text: "#b32e29" },
+  },
+  {
+    icon: "key", iconColor: "#185fa5", iconBg: "#e6f1fb",
+    title: "Chave de moto — Honda", location: "Moema, SP",
+    time: "há 12min", status: "Match!",
+    badgeStyle: { bg: "#e6f1fb", text: "#185fa5" },
+  },
+];
 
-const colors = {
-  primary: '#abe8ff',
-  surface: '#FFFFFF',
-  text: '#0B0F1A',
-  border: 'rgba(0, 30, 100, 0.09)',
-};
-
-export default function NavBar({ onEnterApp }) {
-  const logoSize = isMobile ? 'small' : 'normal';
-
+export default function Home({ navigation }) {
   return (
-    <View style={styles.nav}>
-      <LogoFind size={logoSize} dark={false} />
-
-      {!isMobile && (
-        <View style={styles.navLinks}>
-          <TouchableOpacity><Text style={styles.navLink}>Benefícios</Text></TouchableOpacity>
-          <TouchableOpacity><Text style={styles.navLink}>Como funciona</Text></TouchableOpacity>
-          <TouchableOpacity><Text style={styles.navLink}>Depoimentos</Text></TouchableOpacity>
+    <View style={styles.container}>
+      <StatusBar barStyle="dark-content" backgroundColor="#90dbf4" />
+      <HomeHeader />
+      <ScrollView
+        style={styles.body}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.bodyContent}
+      >
+        <SearchBar />
+        <Text style={styles.sectionTitle}>Categorias</Text>
+        <CategoryList />
+        <StatsRow />
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>Destaques</Text>
+          <TouchableOpacity>
+            <Text style={styles.seeAll}>Ver todos</Text>
+          </TouchableOpacity>
         </View>
-      )}
-
-      <View style={styles.navActions}>
-        <TouchableOpacity style={styles.btnGhost} onPress={onEnterApp}>
-          <Text style={styles.btnGhostText}>Entrar</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.btnPrimary} onPress={onEnterApp}>
-          <Text style={styles.btnPrimaryText}>Cadastre-se</Text>
-        </TouchableOpacity>
-      </View>
+        {items.map((item, i) => (
+          <ItemCard key={i} item={item} />
+        ))}
+      </ScrollView>
+      <TouchableOpacity style={styles.fab}>
+        <Ionicons name="add" size={28} color="#0B3A4A" />
+      </TouchableOpacity>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  nav: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    // no mobile junta tudo; no desktop espalha
-    justifyContent: isMobile ? 'space-between' : 'space-between',
-    paddingHorizontal: isMobile ? 12 : 16,
-    paddingVertical: isMobile ? 10 : 10,
-    marginTop: isMobile ? 0 : 20,
-    backgroundColor: colors.primary,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  navLinks: {
-    flexDirection: 'row',
-    gap: 20,
-  },
-  navLink: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: colors.text,
-  },
-  navActions: {
-    flexDirection: 'row',
-    gap: isMobile ? 4 : 8,
-  },
-  btnGhost: {
-    paddingVertical: isMobile ? 6 : 8,
-    paddingHorizontal: isMobile ? 8 : 12,
-    borderRadius: 6,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-  },
-  btnGhostText: {
-    fontSize: isMobile ? 11 : 12,
-    fontWeight: '600',
-    color: colors.text,
-  },
-  btnPrimary: {
-    paddingVertical: isMobile ? 6 : 8,
-    paddingHorizontal: isMobile ? 8 : 12,
-    borderRadius: 6,
-    backgroundColor: colors.text,
-  },
-  btnPrimaryText: {
-    fontSize: isMobile ? 11 : 12,
-    fontWeight: '700',
-    color: colors.primary,
+  container: { flex: 1, backgroundColor: "#F5F7FB" },
+  body: { flex: 1, marginTop: -16 },
+  bodyContent: { paddingHorizontal: 16, paddingBottom: 40 },
+  sectionHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 },
+  sectionTitle: { fontSize: 16, fontWeight: "600", color: "#0B0F1A", marginBottom: 12 },
+  seeAll: { fontSize: 13, color: "#0B3A4A", fontWeight: "500" },
+  fab: {
+    position: "absolute", right: 20, bottom: 20,
+    width: 52, height: 52, borderRadius: 26,
+    backgroundColor: "#90dbf4", alignItems: "center", justifyContent: "center",
+    shadowColor: "#90dbf4", shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4, shadowRadius: 12, elevation: 6,
   },
 });
