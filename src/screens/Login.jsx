@@ -11,10 +11,14 @@ import {
   Platform,
   ScrollView,
 } from "react-native";
+
 import { useRef, useEffect, useState } from "react";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from "@expo/vector-icons";
 import LogoFind from "../components/layout/LogoFind";
+import auth from '../services/auth';
+
 const { width: screenWidth, height: screenHeight } = Dimensions.get("window");
 const isMobile = screenWidth < 768;
 
@@ -98,7 +102,26 @@ function InputField({ label, icon, value, onChangeText, secureEntry, keyboardTyp
           backgroundColor: error ? colors.errorBg : (focused ? colors.surface : colors.surfaceAlt),
         },
       ]}>
-        
+        <Ionicons
+          name={icon}
+          size={16}
+          color={focused ? colors.button : (error ? colors.error : colors.textMuted)}
+          style={styles.inputIcon}
+        />
+        <TextInput
+          style={styles.input}
+          value={value}
+          onChangeText={onChangeText}
+          onFocus={onFocus}
+          onBlur={onBlur}
+          secureTextEntry={secureEntry && !visible}
+          keyboardType={keyboardType || 'default'}
+          autoCapitalize={autoCapitalize || 'none'}
+          autoCorrect={false}
+          placeholderTextColor={colors.textMuted}
+          placeholder={label}
+          underlineColorAndroid="transparent"
+        />
         {secureEntry && (
           <TouchableOpacity onPress={() => setVisible(!visible)} style={styles.eyeBtn}>
             <Ionicons
@@ -169,19 +192,27 @@ export default function Login({ onLogin, onGoToRegister, onBack }) {
 
   const validate = () => {
     const e = {};
-    if (!email.trim())             e.email    = 'Informe seu e-mail';
-    else if (!email.includes('@')) e.email    = 'E-mail inválido';
+    if (!email.trim())             e.email    = 'Informe seu e-mail ou usuário';
     if (!password)                 e.password = 'Informe sua senha';
     else if (password.length < 6)  e.password = 'Mínimo 6 caracteres';
     return e;
   };
 
-  const handleLogin = () => {
+  const navigation = useNavigation();
+
+  const handleLogin = async () => {
     const e = validate();
     if (Object.keys(e).length) { setErrors(e); return; }
     setErrors({});
     setLoading(true);
-    setTimeout(() => { setLoading(false); onLogin?.(); }, 1200);
+    try {
+      await auth.login(email, password);
+      setLoading(false);
+      navigation.navigate('main');
+    } catch (err) {
+      setLoading(false);
+      setErrors({ general: err.message || 'Erro ao autenticar' });
+    }
   };
 
   return (
@@ -252,14 +283,22 @@ export default function Login({ onLogin, onGoToRegister, onBack }) {
           <FadeSlide delay={260} style={styles.cardWrap}>
             <View style={styles.card}>
 
+              {/* General error */}
+              {errors.general && (
+                <View style={[styles.feedbackRow, { backgroundColor: colors.errorBg, borderColor: colors.errorBorder, borderWidth: 1, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8, marginBottom: 16 }]}>
+                  <Ionicons name="alert-circle" size={14} color={colors.error} />
+                  <Text style={[styles.errorText, { flex: 1 }]}>{errors.general}</Text>
+                </View>
+              )}
+
               {/* Inputs */}
               <FadeSlide delay={320}>
                 <InputField
-                  label="E-mail"
+                  label="E-mail ou Usuário"
                   icon="mail-outline"
                   value={email}
                   onChangeText={setEmail}
-                  keyboardType="email-address"
+                  keyboardType="default"
                   error={errors.email}
                 />
               </FadeSlide>
@@ -333,7 +372,7 @@ export default function Login({ onLogin, onGoToRegister, onBack }) {
           <FadeSlide delay={610}>
             <View style={styles.registerRow}>
               <Text style={styles.registerPrompt}>Não tem uma conta? </Text>
-              <TouchableOpacity onPress={onGoToRegister} activeOpacity={0.7}>
+              <TouchableOpacity onPress={() => navigation.navigate('register')} activeOpacity={0.7}>
                 <Text style={styles.registerLink}>Cadastre-se grátis</Text>
               </TouchableOpacity>
             </View>
