@@ -1,10 +1,13 @@
+import React from "react";
 import { NavigationContainer, useNavigation } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
-import { View, Text, TouchableOpacity } from "react-native";
+import { View, Text, TouchableOpacity, ActivityIndicator } from "react-native";
+import { useEffect, useState } from "react";
+import auth from "./src/services/auth";
 
 import LandingPage from "./src/screens/LandingPage";
 import Login from "./src/screens/Login";
@@ -14,6 +17,9 @@ import Dashboard from "./src/screens/Dashboard";
 import CadastrarItem from "./src/screens/CadastrarItem";
 import Chat from "./src/screens/Chat";
 import ChatConversa from "./src/screens/ChatConversa";
+import Busca from "./src/screens/Busca";
+import Notificacoes from "./src/screens/Notificacoes";
+import DetalheItem from "./src/screens/DetalheItem";
 
 const colors = {
   primary: "#90dbf4",
@@ -35,6 +41,7 @@ function PlaceholderScreen({ route }) {
     </View>
   );
 }
+
 function AddButton() {
   const navigation = useNavigation();
   return (
@@ -53,7 +60,7 @@ function AddButton() {
           width: 44,
           height: 44,
           borderRadius: 22,
-          backgroundColor: colors.primary,  // azul claro #90dbf4
+          backgroundColor: colors.primary,
           alignItems: "center",
           justifyContent: "center",
         }}
@@ -89,20 +96,18 @@ function TabNavigator() {
         },
         tabBarIcon: ({ focused, color }) => {
           const icons = {
-            Home:   { active: "home",        inactive: "home-outline" },
-            Buscar: { active: "search",      inactive: "search-outline" },
-            Chat:   { active: "chatbubbles", inactive: "chatbubbles-outline" },
-            Perfil: { active: "person",      inactive: "person-outline" },
+            Home: { active: "home", inactive: "home-outline" },
+            Buscar: { active: "search", inactive: "search-outline" },
+            Chat: { active: "chatbubbles", inactive: "chatbubbles-outline" },
+            Perfil: { active: "person", inactive: "person-outline" },
           };
           const name = icons[route.name]?.[focused ? "active" : "inactive"] ?? "ellipse";
           return <Ionicons name={name} size={22} color={color} />;
         },
       })}
     >
-      <Tab.Screen name="Home"   component={Home} />
-      <Tab.Screen name="Buscar" component={PlaceholderScreen} />
-
-      {/* ── Botão + central — não é uma tela, só um botão */}
+      <Tab.Screen name="Home" component={Home} />
+      <Tab.Screen name="Buscar" component={Busca} />
       <Tab.Screen
         name="Novo"
         component={PlaceholderScreen}
@@ -111,33 +116,59 @@ function TabNavigator() {
           tabBarButton: () => <AddButton />,
         }}
       />
-
-      <Tab.Screen name="Chat"   component={Chat} />
+      <Tab.Screen name="Chat" component={Chat} />
       <Tab.Screen name="Perfil" component={Dashboard} />
     </Tab.Navigator>
   );
 }
 
 export default function App() {
+  const [isLoading, setIsLoading] = useState(true);
+  const [userToken, setUserToken] = useState(null);
+
+  useEffect(() => {
+    bootstrapAsync();
+  }, []);
+
+  const bootstrapAsync = async () => {
+    try {
+      const tokens = await auth.getTokens();
+      setUserToken(tokens?.access ? tokens.access : null);
+    } catch (e) {
+      console.log("Failed to restore token", e);
+    }
+    setIsLoading(false);
+  };
+
+  if (isLoading) {
+    return (
+      <SafeAreaProvider>
+        <View style={{ flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: colors.surface }}>
+          <ActivityIndicator size="large" color={colors.primary} />
+        </View>
+      </SafeAreaProvider>
+    );
+  }
+
   return (
     <SafeAreaProvider>
       <StatusBar style="dark" backgroundColor="transparent" translucent />
       <NavigationContainer>
         <Stack.Navigator
-          initialRouteName="main"
           screenOptions={{ headerShown: false }}
+          // 💡 Se você quiser abrir DIRETO na Home para ver as mudanças sem passar por nada: mude para "main"
+          initialRouteName="landing" 
         >
-          <Stack.Screen name="landing"   component={LandingPage} />
-          <Stack.Screen name="login"     component={Login} />
-          <Stack.Screen name="register"  component={Register} />
-          <Stack.Screen name="main"      component={TabNavigator} />
+          {/* 🔓 TODAS AS ROTAS JUNTAS E LIVRES PARA VOCÊ DESENVOLVER SEM TRAVAS */}
+          <Stack.Screen name="landing" component={LandingPage} />
+          <Stack.Screen name="login" component={Login} />
+          <Stack.Screen name="register" component={Register} />
+          
+          <Stack.Screen name="main" component={TabNavigator} />
           <Stack.Screen name="chatConversa" component={ChatConversa} />
-          {/* ── CadastrarItem fora da tab, abre como modal */}
-          <Stack.Screen
-            name="cadastrar"
-            component={CadastrarItem}
-            options={{ presentation: "modal" }}
-          />
+          <Stack.Screen name="cadastrar" component={CadastrarItem} options={{ presentation: "modal" }} />
+          <Stack.Screen name="notificacoes" component={Notificacoes} />
+          <Stack.Screen name="DetalheItem" component={DetalheItem} />
         </Stack.Navigator>
       </NavigationContainer>
     </SafeAreaProvider>

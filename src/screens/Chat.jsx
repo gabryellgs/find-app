@@ -1,10 +1,13 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   View, Text, TouchableOpacity,
   ScrollView, StyleSheet, TextInput,
+  ActivityIndicator,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useIsFocused } from "@react-navigation/native";
+import { fetchChats } from "../services/api";
 
 const colors = {
   primary: "#90dbf4",
@@ -17,73 +20,82 @@ const colors = {
   border: "rgba(0, 30, 100, 0.08)",
 };
 
-const conversas = [
-  {
-    id: 1,
-    nome: "João Silva",
-    ultimaMensagem: "Oi! Você encontrou a carteira?",
-    hora: "14:32",
-    naoLidas: 2,
-    iniciais: "JS",
-    avatarBg: "#e6f1fb",
-    avatarColor: "#185fa5",
-    online: true,
-  },
-  {
-    id: 2,
-    nome: "Maria Souza",
-    ultimaMensagem: "Sim, está aqui comigo! Podemos nos encontrar amanhã?",
-    hora: "13:10",
-    naoLidas: 0,
-    iniciais: "MS",
-    avatarBg: "#e1f9ed",
-    avatarColor: "#0a7a3e",
-    online: false,
-  },
-  {
-    id: 3,
-    nome: "Carlos Mendes",
-    ultimaMensagem: "Perfeito, obrigado!",
-    hora: "Ontem",
-    naoLidas: 0,
-    iniciais: "CM",
-    avatarBg: "#fdecea",
-    avatarColor: "#b32e29",
-    online: false,
-  },
-  {
-    id: 4,
-    nome: "Ana Paula",
-    ultimaMensagem: "Achei seu celular no metrô, como faço para te entregar?",
-    hora: "Ontem",
-    naoLidas: 1,
-    iniciais: "AP",
-    avatarBg: "#f3e8ff",
-    avatarColor: "#7c3aed",
-    online: true,
-  },
-  {
-    id: 5,
-    nome: "Roberto Lima",
-    ultimaMensagem: "Tudo bem, qualquer coisa me avisa.",
-    hora: "Seg",
-    naoLidas: 0,
-    iniciais: "RL",
-    avatarBg: "#fff7e6",
-    avatarColor: "#b45309",
-    online: false,
-  },
+// Cores para avatares baseadas no id do usuário
+const AVATAR_COLORS = [
+  { bg: "#e6f1fb", color: "#185fa5" },
+  { bg: "#e1f9ed", color: "#0a7a3e" },
+  { bg: "#fdecea", color: "#b32e29" },
+  { bg: "#f3e8ff", color: "#7c3aed" },
+  { bg: "#fff7e6", color: "#b45309" },
+  { bg: "#e0f2fe", color: "#0369a1" },
 ];
+
+function getAvatarColor(id) {
+  return AVATAR_COLORS[(id || 0) % AVATAR_COLORS.length];
+}
+
+function formatHora(isoString) {
+  if (!isoString) return "";
+  try {
+    const date = new Date(isoString);
+    const agora = new Date();
+    const diff = agora - date;
+    const umDia = 24 * 60 * 60 * 1000;
+
+    if (diff < umDia) {
+      return date.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+    }
+    if (diff < 2 * umDia) return "Ontem";
+    if (diff < 7 * umDia) {
+      const dias = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
+      return dias[date.getDay()];
+    }
+    return date.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
+  } catch {
+    return "";
+  }
+}
 
 export default function Chat({ navigation }) {
   const insets = useSafeAreaInsets();
+  const isFocused = useIsFocused();
   const [busca, setBusca] = useState("");
+  const [conversas, setConversas] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
-  const filtradas = conversas.filter((c) =>
-    c.nome.toLowerCase().includes(busca.toLowerCase())
-  );
+  const carregarChats = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await fetchChats();
+      if (data?.results) {
+        setConversas(data.results);
+      } else {
+        setConversas([]);
+      }
+    } catch (e) {
+      setError(e.message);
+      setConversas([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
-  const totalNaoLidas = conversas.reduce((acc, c) => acc + c.naoLidas, 0);
+  useEffect(() => {
+    if (isFocused) {
+      carregarChats();
+    }
+  }, [isFocused, carregarChats]);
+
+  const filtradas = conversas.filter((c) => {
+    const nome = c.outro_usuario?.nome || c.outro_usuario?.username || "";
+    const itemTitulo = c.item?.titulo || "";
+    const q = busca.toLowerCase();
+    return nome.toLowerCase().includes(q) || itemTitulo.toLowerCase().includes(q);
+  });
+
+  const totalNaoLidas = conversas.reduce((acc, c) => acc + (c.nao_lidas || 0), 0);
 
   return (
     <View style={styles.container}>
@@ -98,8 +110,8 @@ export default function Chat({ navigation }) {
             </View>
           )}
         </View>
-        <TouchableOpacity style={styles.headerBtn}>
-          <Ionicons name="create-outline" size={20} color={colors.primaryDark} />
+        <TouchableOpacity style={styles.headerBtn} onPress={carregarChats}>
+          <Ionicons name="refresh-outline" size={20} color={colors.primaryDark} />
         </TouchableOpacity>
       </View>
 
@@ -125,70 +137,103 @@ export default function Chat({ navigation }) {
           )}
         </View>
 
+        {/* Loading */}
+        {loading && (
+          <View style={styles.vazio}>
+            <ActivityIndicator size="large" color={colors.primaryDark} />
+            <Text style={styles.vazioText}>Carregando conversas...</Text>
+          </View>
+        )}
+
+        {/* Error */}
+        {error && !loading && (
+          <View style={styles.vazio}>
+            <Ionicons name="alert-circle-outline" size={40} color="#e8514a" />
+            <Text style={[styles.vazioText, { color: "#e8514a" }]}>{error}</Text>
+            <TouchableOpacity onPress={carregarChats} style={styles.retryBtn}>
+              <Text style={styles.retryText}>Tentar novamente</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
         {/* Lista */}
-        {filtradas.length === 0 ? (
+        {!loading && !error && filtradas.length === 0 ? (
           <View style={styles.vazio}>
             <Ionicons name="chatbubbles-outline" size={40} color={colors.textLight} />
-            <Text style={styles.vazioText}>Nenhuma conversa encontrada</Text>
+            <Text style={styles.vazioText}>
+              {conversas.length === 0
+                ? "Nenhuma conversa ainda"
+                : "Nenhuma conversa encontrada"}
+            </Text>
+            <Text style={[styles.vazioText, { fontSize: 12, marginTop: 4 }]}>
+              Inicie um chat pela página de detalhes de um item
+            </Text>
           </View>
         ) : (
-          filtradas.map((conversa, i) => (
-            <TouchableOpacity
-              key={conversa.id}
-              style={[styles.card, i === filtradas.length - 1 && { marginBottom: 0 }]}
-              activeOpacity={0.7}
-              onPress={() =>
-                navigation.navigate("chatConversa", {
-                  nome: conversa.nome,
-                  iniciais: conversa.iniciais,
-                  avatarBg: conversa.avatarBg,
-                  avatarColor: conversa.avatarColor,
-                  online: conversa.online,
-                })
-              }
-            >
-              {/* Avatar */}
-              <View style={styles.avatarWrap}>
-                <View style={[styles.avatar, { backgroundColor: conversa.avatarBg }]}>
-                  <Text style={[styles.avatarText, { color: conversa.avatarColor }]}>
-                    {conversa.iniciais}
-                  </Text>
-                </View>
-                {conversa.online && <View style={styles.onlineDot} />}
-              </View>
+          !loading && !error && filtradas.map((conversa, i) => {
+            const outro = conversa.outro_usuario || {};
+            const avatarStyle = getAvatarColor(outro.id);
+            const iniciais = outro.iniciais || (outro.nome || "??").substring(0, 2).toUpperCase();
+            const naoLidas = conversa.nao_lidas || 0;
 
-              {/* Conteúdo */}
-              <View style={styles.cardBody}>
-                <View style={styles.cardTop}>
-                  <Text style={styles.nome} numberOfLines={1}>{conversa.nome}</Text>
-                  <Text style={[
-                    styles.hora,
-                    conversa.naoLidas > 0 && { color: colors.primaryDark, fontWeight: "700" },
-                  ]}>
-                    {conversa.hora}
-                  </Text>
+            return (
+              <TouchableOpacity
+                key={conversa.id}
+                style={[styles.card, i === filtradas.length - 1 && { marginBottom: 0 }]}
+                activeOpacity={0.7}
+                onPress={() =>
+                  navigation.navigate("chatConversa", {
+                    chatId: conversa.id,
+                    nome: outro.nome || outro.username,
+                    iniciais: iniciais,
+                    avatarBg: avatarStyle.bg,
+                    avatarColor: avatarStyle.color,
+                    itemTitulo: conversa.item?.titulo || "",
+                  })
+                }
+              >
+                {/* Avatar */}
+                <View style={styles.avatarWrap}>
+                  <View style={[styles.avatar, { backgroundColor: avatarStyle.bg }]}>
+                    <Text style={[styles.avatarText, { color: avatarStyle.color }]}>
+                      {iniciais}
+                    </Text>
+                  </View>
                 </View>
-                <View style={styles.cardBottom}>
-                  <Text
-                    style={[
-                      styles.ultimaMensagem,
-                      conversa.naoLidas > 0 && { color: colors.text, fontWeight: "500" },
-                    ]}
-                    numberOfLines={1}
-                  >
-                    {conversa.ultimaMensagem}
-                  </Text>
-                  {conversa.naoLidas > 0 && (
-                    <View style={styles.badge}>
-                      <Text style={styles.badgeText}>{conversa.naoLidas}</Text>
-                    </View>
-                  )}
-                </View>
-              </View>
 
-              <Ionicons name="chevron-forward" size={16} color={colors.textLight} />
-            </TouchableOpacity>
-          ))
+                {/* Conteúdo */}
+                <View style={styles.cardBody}>
+                  <View style={styles.cardTop}>
+                    <Text style={styles.nome} numberOfLines={1}>{outro.nome || outro.username}</Text>
+                    <Text style={[
+                      styles.hora,
+                      naoLidas > 0 && { color: colors.primaryDark, fontWeight: "700" },
+                    ]}>
+                      {formatHora(conversa.ultima_hora || conversa.atualizado_em)}
+                    </Text>
+                  </View>
+                  <View style={styles.cardBottom}>
+                    <Text
+                      style={[
+                        styles.ultimaMensagem,
+                        naoLidas > 0 && { color: colors.text, fontWeight: "500" },
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {conversa.ultima_mensagem || conversa.item?.titulo || "Sem mensagens"}
+                    </Text>
+                    {naoLidas > 0 && (
+                      <View style={styles.badge}>
+                        <Text style={styles.badgeText}>{naoLidas}</Text>
+                      </View>
+                    )}
+                  </View>
+                </View>
+
+                <Ionicons name="chevron-forward" size={16} color={colors.textLight} />
+              </TouchableOpacity>
+            );
+          })
         )}
       </ScrollView>
     </View>
@@ -246,12 +291,6 @@ const styles = StyleSheet.create({
     alignItems: "center", justifyContent: "center",
   },
   avatarText: { fontSize: 15, fontWeight: "700" },
-  onlineDot: {
-    position: "absolute", bottom: 2, right: 2,
-    width: 11, height: 11, borderRadius: 6,
-    backgroundColor: "#0a7a3e",
-    borderWidth: 2, borderColor: colors.surface,
-  },
 
   cardBody: { flex: 1, minWidth: 0 },
   cardTop: {
@@ -277,5 +316,10 @@ const styles = StyleSheet.create({
     alignItems: "center", justifyContent: "center",
     paddingTop: 60, gap: 12,
   },
-  vazioText: { fontSize: 14, color: colors.textLight },
+  vazioText: { fontSize: 14, color: colors.textLight, textAlign: "center" },
+  retryBtn: {
+    marginTop: 8, paddingHorizontal: 20, paddingVertical: 10,
+    backgroundColor: colors.primary, borderRadius: 12,
+  },
+  retryText: { fontSize: 13, fontWeight: "700", color: colors.primaryDark },
 });

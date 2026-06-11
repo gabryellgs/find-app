@@ -4,11 +4,11 @@
     "slug": "front-find",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/layout/logo-find.webp",
+    "icon": "./assets/logo/logo-find.webp",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "splash": {
-      "image": "./assets/layout/logo-find.webpg",
+      "image": "./assets/logo/logo-find.webp",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
@@ -17,7 +17,7 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/layout/logo-find.webp",
+        "foregroundImage": "./assets/logo/logo-find.webp",
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true

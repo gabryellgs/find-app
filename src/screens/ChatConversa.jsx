@@ -1,11 +1,12 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect, useCallback } from "react";
 import {
   View, Text, TouchableOpacity, ScrollView,
   StyleSheet, TextInput, KeyboardAvoidingView,
-  Platform,
+  Platform, ActivityIndicator,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { fetchChatMessages, sendChatMessage } from "../services/api";
 
 const colors = {
   primary: "#90dbf4",
@@ -18,39 +19,89 @@ const colors = {
   border: "rgba(0, 30, 100, 0.08)",
 };
 
-const mensagensIniciais = [
-  { id: 1, meu: false, texto: "Oi! Você encontrou a carteira?", hora: "14:28" },
-  { id: 2, meu: true,  texto: "Sim! Achei aqui perto da Av. Paulista.", hora: "14:29" },
-  { id: 3, meu: false, texto: "Que alívio! Como posso recuperar?", hora: "14:30" },
-  { id: 4, meu: true,  texto: "Podemos nos encontrar amanhã de manhã?", hora: "14:31" },
-  { id: 5, meu: false, texto: "Oi! Você encontrou a carteira?", hora: "14:32" },
-];
+function formatHora(isoString) {
+  if (!isoString) return "";
+  try {
+    const date = new Date(isoString);
+    return date.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+  } catch {
+    return "";
+  }
+}
 
 export default function ChatConversa({ navigation, route }) {
   const insets = useSafeAreaInsets();
   const scrollRef = useRef(null);
-  const { nome, iniciais, avatarBg, avatarColor, online } = route.params ?? {
-    nome: "João Silva",
-    iniciais: "JS",
-    avatarBg: "#e6f1fb",
-    avatarColor: "#185fa5",
-    online: true,
-  };
+  const {
+    chatId,
+    nome = "Usuário",
+    iniciais = "??",
+    avatarBg = "#e6f1fb",
+    avatarColor = "#185fa5",
+    itemTitulo = "",
+  } = route.params ?? {};
 
-  const [mensagens, setMensagens] = useState(mensagensIniciais);
+  const [mensagens, setMensagens] = useState([]);
   const [texto, setTexto] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [sending, setSending] = useState(false);
+  const [chatStatus, setChatStatus] = useState("ativo");
+  const [error, setError] = useState(null);
+  const pollingRef = useRef(null);
 
-  function enviar() {
-    if (!texto.trim()) return;
-    const nova = {
-      id: Date.now(),
-      meu: true,
-      texto: texto.trim(),
-      hora: new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
+  const carregarMensagens = useCallback(async () => {
+    if (!chatId) return;
+    try {
+      setError(null);
+      const data = await fetchChatMessages(chatId);
+      if (data?.results) {
+        setMensagens(data.results);
+      }
+      if (data?.status) {
+        setChatStatus(data.status);
+      }
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [chatId]);
+
+  // Carrega mensagens ao abrir e faz polling a cada 5s
+  useEffect(() => {
+    carregarMensagens();
+    pollingRef.current = setInterval(carregarMensagens, 5000);
+    return () => {
+      if (pollingRef.current) clearInterval(pollingRef.current);
     };
-    setMensagens((prev) => [...prev, nova]);
-    setTexto("");
-    setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
+  }, [carregarMensagens]);
+
+  async function enviar() {
+    if (!texto.trim() || sending || !chatId) return;
+    try {
+      setSending(true);
+      const data = await sendChatMessage(chatId, texto.trim());
+      if (data?.ok && data?.data) {
+        setMensagens((prev) => [...prev, data.data]);
+      }
+      setTexto("");
+      setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
+    } catch (e) {
+      console.log("Erro ao enviar:", e.message);
+    } finally {
+      setSending(false);
+    }
+  }
+
+  if (!chatId) {
+    return (
+      <View style={[styles.container, { alignItems: "center", justifyContent: "center" }]}>
+        <Ionicons name="alert-circle-outline" size={48} color={colors.textLight} />
+        <Text style={{ color: colors.textMuted, marginTop: 12, fontSize: 14 }}>
+          Chat não encontrado
+        </Text>
+      </View>
+    );
   }
 
   return (
@@ -71,13 +122,19 @@ export default function ChatConversa({ navigation, route }) {
 
         <View style={styles.headerInfo}>
           <Text style={styles.headerNome}>{nome}</Text>
-          <Text style={styles.headerStatus}>
-            {online ? "● Online agora" : "● Offline"}
-          </Text>
+          {itemTitulo ? (
+            <Text style={styles.headerStatus} numberOfLines={1}>
+              📦 {itemTitulo}
+            </Text>
+          ) : (
+            <Text style={styles.headerStatus}>
+              {chatStatus === "ativo" ? "● Chat ativo" : "● Chat fechado"}
+            </Text>
+          )}
         </View>
 
-        <TouchableOpacity style={styles.headerBtn}>
-          <Ionicons name="ellipsis-vertical" size={18} color={colors.primaryDark} />
+        <TouchableOpacity style={styles.headerBtn} onPress={carregarMensagens}>
+          <Ionicons name="refresh-outline" size={18} color={colors.primaryDark} />
         </TouchableOpacity>
       </View>
 
@@ -87,65 +144,107 @@ export default function ChatConversa({ navigation, route }) {
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         keyboardVerticalOffset={0}
       >
-        <ScrollView
-          ref={scrollRef}
-          style={styles.body}
-          contentContainerStyle={[styles.bodyContent, { paddingBottom: 12 }]}
-          onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: false })}
-          showsVerticalScrollIndicator={false}
-        >
-          {mensagens.map((msg, i) => {
-            const mostrarHora =
-              i === mensagens.length - 1 ||
-              mensagens[i + 1]?.meu !== msg.meu;
-
-            return (
-              <View
-                key={msg.id}
-                style={[
-                  styles.msgWrap,
-                  msg.meu ? styles.msgWrapMeu : styles.msgWrapDele,
-                ]}
-              >
-                <View style={[styles.bubble, msg.meu ? styles.bubbleMeu : styles.bubbleDele]}>
-                  <Text style={[styles.bubbleText, msg.meu && styles.bubbleTextMeu]}>
-                    {msg.texto}
+        {loading ? (
+          <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
+            <ActivityIndicator size="large" color={colors.primaryDark} />
+            <Text style={{ color: colors.textMuted, marginTop: 12, fontSize: 13 }}>
+              Carregando mensagens...
+            </Text>
+          </View>
+        ) : error ? (
+          <View style={{ flex: 1, alignItems: "center", justifyContent: "center", gap: 12 }}>
+            <Ionicons name="alert-circle-outline" size={40} color="#e8514a" />
+            <Text style={{ color: "#e8514a", fontSize: 13 }}>{error}</Text>
+          </View>
+        ) : (
+          <>
+            <ScrollView
+              ref={scrollRef}
+              style={styles.body}
+              contentContainerStyle={[styles.bodyContent, { paddingBottom: 12 }]}
+              onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: false })}
+              showsVerticalScrollIndicator={false}
+            >
+              {mensagens.length === 0 && (
+                <View style={{ alignItems: "center", paddingTop: 60 }}>
+                  <Ionicons name="chatbubble-ellipses-outline" size={40} color={colors.textLight} />
+                  <Text style={{ color: colors.textLight, marginTop: 8, fontSize: 13 }}>
+                    Envie a primeira mensagem!
                   </Text>
                 </View>
-                {mostrarHora && (
-                  <Text style={[styles.hora, msg.meu && styles.horaMeu]}>
-                    {msg.hora}
-                  </Text>
-                )}
-              </View>
-            );
-          })}
-        </ScrollView>
+              )}
 
-        {/* Input */}
-        <View style={[styles.inputBar, { paddingBottom: insets.bottom + 10 }]}>
-          <View style={styles.inputCard}>
-            <TextInput
-              style={styles.input}
-              placeholder="Digite uma mensagem..."
-              placeholderTextColor={colors.textLight}
-              value={texto}
-              onChangeText={setTexto}
-              multiline
-            />
-            <TouchableOpacity
-              onPress={enviar}
-              style={[styles.sendBtn, texto.trim() && styles.sendBtnActive]}
-              activeOpacity={0.8}
-            >
-              <Ionicons
-                name="send"
-                size={18}
-                color={texto.trim() ? colors.primaryDark : colors.textLight}
-              />
-            </TouchableOpacity>
-          </View>
-        </View>
+              {mensagens.map((msg, i) => {
+                const isMe = msg.is_me;
+                const mostrarHora =
+                  i === mensagens.length - 1 ||
+                  mensagens[i + 1]?.is_me !== msg.is_me;
+
+                return (
+                  <View
+                    key={msg.id}
+                    style={[
+                      styles.msgWrap,
+                      isMe ? styles.msgWrapMeu : styles.msgWrapDele,
+                    ]}
+                  >
+                    <View style={[styles.bubble, isMe ? styles.bubbleMeu : styles.bubbleDele]}>
+                      <Text style={[styles.bubbleText, isMe && styles.bubbleTextMeu]}>
+                        {msg.conteudo}
+                      </Text>
+                    </View>
+                    {mostrarHora && (
+                      <Text style={[styles.hora, isMe && styles.horaMeu]}>
+                        {formatHora(msg.data_envio)}
+                      </Text>
+                    )}
+                  </View>
+                );
+              })}
+            </ScrollView>
+
+            {/* Input */}
+            {chatStatus === "ativo" ? (
+              <View style={[styles.inputBar, { paddingBottom: insets.bottom + 10 }]}>
+                <View style={styles.inputCard}>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Digite uma mensagem..."
+                    placeholderTextColor={colors.textLight}
+                    value={texto}
+                    onChangeText={setTexto}
+                    multiline
+                    editable={!sending}
+                  />
+                  <TouchableOpacity
+                    onPress={enviar}
+                    style={[styles.sendBtn, texto.trim() && styles.sendBtnActive]}
+                    activeOpacity={0.8}
+                    disabled={!texto.trim() || sending}
+                  >
+                    {sending ? (
+                      <ActivityIndicator size="small" color={colors.primaryDark} />
+                    ) : (
+                      <Ionicons
+                        name="send"
+                        size={18}
+                        color={texto.trim() ? colors.primaryDark : colors.textLight}
+                      />
+                    )}
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ) : (
+              <View style={[styles.inputBar, { paddingBottom: insets.bottom + 10 }]}>
+                <View style={[styles.inputCard, { justifyContent: "center" }]}>
+                  <Text style={{ color: colors.textMuted, fontSize: 13, fontWeight: "600" }}>
+                    Este chat foi encerrado
+                  </Text>
+                </View>
+              </View>
+            )}
+          </>
+        )}
       </KeyboardAvoidingView>
     </View>
   );
