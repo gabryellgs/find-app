@@ -8,6 +8,7 @@ import {
 } from 'react-native';
 import { useEffect, useRef, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
+import { fetchStats } from '../../services/api';
 
 const { width: screenWidth } = Dimensions.get('window');
 const isMobile = screenWidth < 768;
@@ -69,13 +70,6 @@ function Counter({ target, suffix = '', style }) {
   return <Text style={style}>{val.toLocaleString('pt-BR')}{suffix}</Text>;
 }
 
-// Stats config
-const STATS = [
-  { label: 'Itens recuperados', target: 40000, suffix: '+', icon: 'bag-check-outline' },
-  { label: 'Usuários ativos',   target: 12800, suffix: '+', icon: 'people-outline'    },
-  { label: 'Cidades',           target: 210,   suffix: '',  icon: 'location-outline'  },
-];
-
 // Pills config
 const PILLS = [
   { label: 'Gratuito', icon: 'gift-outline'},
@@ -85,6 +79,19 @@ const PILLS = [
 
 export default function HeroSection({ onRegister }) {
   const btnScale = useRef(new Animated.Value(1)).current;
+  const [stats, setStats] = useState({ total: 0, devolvidos: 0, encontrados: 0 });
+
+  useEffect(() => {
+    fetchStats().then(res => {
+      if (res && res.data) setStats(res.data);
+    }).catch(() => {});
+  }, []);
+
+  const STATS = [
+    { label: 'Itens cadastrados', target: stats.total,       suffix: '', icon: 'bag-check-outline' },
+    { label: 'Itens devolvidos',  target: stats.devolvidos,  suffix: '', icon: 'shield-checkmark-outline' },
+    { label: 'Itens achados',     target: stats.encontrados, suffix: '', icon: 'location-outline'  },
+  ];
 
   const onPressIn  = () => Animated.spring(btnScale, { toValue: 0.96, useNativeDriver: true, speed: 30 }).start();
   const onPressOut = () => Animated.spring(btnScale, { toValue: 1,    useNativeDriver: true, speed: 20 }).start();

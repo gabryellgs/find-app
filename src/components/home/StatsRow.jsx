@@ -20,8 +20,8 @@ const colors = {
 export default function StatsRow() {
   const isFocused = useIsFocused();
   const [stats, setStats] = useState({
-    total: 3,
-    perdidos: 3,
+    total: 0,
+    perdidos: 0,
     encontrados: 0,
     devolvidos: 0,
   });
@@ -73,11 +73,11 @@ export default function StatsRow() {
       {/* SEGUNDA LINHA */}
       <View style={styles.row}>
         
-        {/* Encontrados */}
+        {/* Achados */}
         <TouchableOpacity style={styles.card} activeOpacity={0.85}>
           <Ionicons name="checkmark-circle-outline" size={20} color={colors.successIcon} />
           <Text style={styles.value}>{encontrados}</Text>
-          <Text style={styles.labelText}>Encontrados</Text>
+          <Text style={styles.labelText}>Achados</Text>
         </TouchableOpacity>
 
         {/* Devolvidos */}

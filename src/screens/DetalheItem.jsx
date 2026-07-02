@@ -1,11 +1,10 @@
-import React, { useEffect, useState } from "react";
 import {
   View, Text, Image, StyleSheet, ScrollView,
-  TouchableOpacity, StatusBar, ActivityIndicator, Alert,
+  TouchableOpacity, StatusBar, ActivityIndicator, Alert, Modal, Share
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { fetchItemDetail, startChat, deleteItem, changeItemStatus } from "../services/api";
+import { fetchItemDetail, startChat, deleteItem, changeItemStatus, getQrCodeUrl } from "../services/api";
 import auth from "../services/auth";
 
 const colors = {
@@ -24,6 +23,72 @@ const colors = {
 
 const PLACEHOLDER_IMAGE =
   "https://images.unsplash.com/photo-1594322436404-5a0526db4d13?q=80&w=800&auto=format&fit=crop";
+
+/** Exibe o QR Code do item com opção de ampliar. */
+function QrCodeCard({ slug }) {
+  const [ampliado, setAmpliado] = useState(false);
+  const url = getQrCodeUrl(slug);
+
+  return (
+    <>
+      <TouchableOpacity
+        style={qrStyles.card}
+        onPress={() => setAmpliado(true)}
+        activeOpacity={0.85}
+      >
+        <Image
+          source={{ uri: url }}
+          style={qrStyles.qrImage}
+          resizeMode="contain"
+        />
+        <View style={qrStyles.info}>
+          <Text style={qrStyles.infoTitle}>QR Code único do item</Text>
+          <Text style={qrStyles.infoSub}>
+            Escaneie para identificar no balcão. Toque para ampliar.
+          </Text>
+        </View>
+        <Ionicons name="expand-outline" size={18} color={colors.textLight} />
+      </TouchableOpacity>
+
+      <Modal visible={ampliado} transparent animationType="fade" onRequestClose={() => setAmpliado(false)}>
+        <TouchableOpacity
+          style={qrStyles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setAmpliado(false)}
+        >
+          <View style={qrStyles.modalCard}>
+            <Image source={{ uri: url }} style={qrStyles.qrLarge} resizeMode="contain" />
+            <Text style={qrStyles.modalLabel}>Toque para fechar</Text>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+    </>
+  );
+}
+
+const qrStyles = StyleSheet.create({
+  card: {
+    flexDirection: "row", alignItems: "center", gap: 12,
+    backgroundColor: colors.surface, borderRadius: 16,
+    padding: 14, borderWidth: 1, borderColor: colors.borderLight,
+  },
+  qrImage: { width: 72, height: 72, borderRadius: 8 },
+  info: { flex: 1, gap: 4 },
+  infoTitle: { fontSize: 14, fontWeight: "700", color: colors.textDark },
+  infoSub: { fontSize: 12, color: colors.textMuted, lineHeight: 17 },
+  modalOverlay: {
+    flex: 1, backgroundColor: "rgba(0,0,0,0.7)",
+    alignItems: "center", justifyContent: "center",
+  },
+  modalCard: {
+    backgroundColor: colors.surface, borderRadius: 24,
+    padding: 24, alignItems: "center", gap: 12,
+  },
+  qrLarge: { width: 260, height: 260 },
+  modalLabel: { fontSize: 13, color: colors.textMuted },
+});
+
+
 
 function formatDate(raw) {
   if (!raw) return "";
@@ -169,6 +234,20 @@ export default function DetalheItem({ route, navigation }) {
     );
   };
 
+  const handleShare = async () => {
+    if (!currentItem?.slug) return;
+    try {
+      const url = `https://find.ifrn.edu.br/item/${currentItem.slug}/`;
+      await Share.share({
+        message: `Veja este item no Find: ${currentItem.titulo}\n${url}`,
+        url: url,
+        title: currentItem.titulo
+      });
+    } catch (error) {
+      console.log("Erro ao compartilhar", error);
+    }
+  };
+
   if (loading || !currentItem) {
     return (
       <View style={[styles.container, { alignItems: "center", justifyContent: "center" }]}>
@@ -196,13 +275,19 @@ export default function DetalheItem({ route, navigation }) {
 
         <Text style={styles.headerTitle}>Detalhes do objeto</Text>
 
-        {isOwner ? (
-          <TouchableOpacity style={styles.backBtn} onPress={handleDelete} activeOpacity={0.7}>
-            <Ionicons name="trash-outline" size={18} color={colors.danger} />
-          </TouchableOpacity>
-        ) : (
-          <View style={{ width: 38 }} />
-        )}
+        <View style={{ flexDirection: 'row', gap: 8 }}>
+          {currentItem?.slug && (
+            <TouchableOpacity style={styles.backBtn} onPress={handleShare} activeOpacity={0.7}>
+              <Ionicons name="share-social-outline" size={18} color={colors.primaryDark} />
+            </TouchableOpacity>
+          )}
+          {isOwner && (
+            <TouchableOpacity style={styles.backBtn} onPress={handleDelete} activeOpacity={0.7}>
+              <Ionicons name="trash-outline" size={18} color={colors.danger} />
+            </TouchableOpacity>
+          )}
+          {!isOwner && !currentItem?.slug && <View style={{ width: 38 }} />}
+        </View>
       </View>
 
       <ScrollView
@@ -299,6 +384,14 @@ export default function DetalheItem({ route, navigation }) {
                   </TouchableOpacity>
                 )}
               </View>
+            </>
+          )}
+
+          {/* QR Code do item */}
+          {currentItem?.slug && (
+            <>
+              <Text style={styles.sectionLabel}>QR Code do item</Text>
+              <QrCodeCard slug={currentItem.slug} />
             </>
           )}
 

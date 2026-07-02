@@ -1,17 +1,21 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { View, TouchableOpacity, StyleSheet, Image } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native"; 
 import LogoFind from "../layout/LogoFind";
+import auth from "../../services/auth";
 
 const colors = { primary: "#90dbf4", primaryDark: "#0B3A4A" };
 
 export default function HomeHeader() {
   const navigation = useNavigation(); 
+  const [userProfilePic, setUserProfilePic] = useState(null);
 
-  // Quando o usuário tiver foto, coloque a URL aqui. 
-  // Enquanto for null, ele mostra o ícone profissional automaticamente.
-  const userProfilePic = null; 
+  useEffect(() => {
+    auth.getUser().then((user) => {
+      if (user?.foto) setUserProfilePic(user.foto);
+    }).catch(() => {});
+  }, []);
 
   return (
     <View style={styles.header}>

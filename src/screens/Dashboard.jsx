@@ -58,6 +58,8 @@ export default function Dashboard({ navigation }) {
   const [fotoUrl, setFotoUrl] = useState("");
   const [fotoLocal, setFotoLocal] = useState(null); // URI local da nova foto (prévia)
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [isBolsista, setIsBolsista] = useState(false);
 
   // Configurações de preferência (Switches)
   const [notifications, setNotifications] = useState(true);
@@ -85,8 +87,10 @@ export default function Dashboard({ navigation }) {
           setCidade(profile.cidade ? `${profile.cidade}${profile.estado ? ', ' + profile.estado : ''}` : "");
           setIdade(profile.data_nascimento || "");
           setFotoUrl(profile.foto || "");
+          setIsAdmin(profile.is_admin || false);
+          setIsBolsista(profile.is_bolsista || false);
           // Atualiza cache local
-          await auth.saveUser({ name: fullName, username: profile.username, email: profile.email, telefone: profile.telefone || '', cidade: profile.cidade || '', estado: profile.estado || '', foto: profile.foto || '' });
+          await auth.saveUser({ name: fullName, username: profile.username, email: profile.email, telefone: profile.telefone || '', cidade: profile.cidade || '', estado: profile.estado || '', foto: profile.foto || '', is_admin: profile.is_admin || false, is_bolsista: profile.is_bolsista || false });
         }
       } catch {
         // Fallback para dados locais
@@ -99,6 +103,8 @@ export default function Dashboard({ navigation }) {
           setCidade(localUserData.cidade || "");
           setIdade(localUserData.data_nascimento || localUserData.idade || "");
           setFotoUrl(localUserData.foto || "");
+          setIsAdmin(localUserData.is_admin || false);
+          setIsBolsista(localUserData.is_bolsista || false);
         }
       }
 
@@ -316,7 +322,7 @@ export default function Dashboard({ navigation }) {
             <View style={styles.miniStatDivider} />
             <View style={styles.miniStat}>
               <Text style={styles.miniStatValue}>{stats.encontrados}</Text>
-              <Text style={styles.miniStatLabel}>Encontrados</Text>
+              <Text style={styles.miniStatLabel}>Achados</Text>
             </View>
             <View style={styles.miniStatDivider} />
             <View style={styles.miniStat}>
@@ -524,6 +530,68 @@ export default function Dashboard({ navigation }) {
             </View>
           </View>
 
+          {/* ── Acesso Rápido ── */}
+          <SectionLabel title="Acesso rápido" />
+          <View style={styles.card}>
+            <TouchableOpacity style={styles.row} activeOpacity={0.7}
+              onPress={() => navigation.navigate("meusItens")}>
+              <View style={styles.rowIcon}>
+                <Ionicons name="cube-outline" size={18} color={colors.primaryDark} />
+              </View>
+              <View style={styles.rowBody}>
+                <Text style={styles.rowLabel}>Meus Itens</Text>
+                <Text style={styles.rowSub}>Ver e gerenciar seus itens</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={16} color={colors.textLight} />
+            </TouchableOpacity>
+            <Divider />
+            <TouchableOpacity style={styles.row} activeOpacity={0.7}
+              onPress={() => navigation.navigate("notificacoes")}>
+              <View style={styles.rowIcon}>
+                <Ionicons name="notifications-outline" size={18} color={colors.primaryDark} />
+              </View>
+              <View style={styles.rowBody}>
+                <Text style={styles.rowLabel}>Notificações</Text>
+                <Text style={styles.rowSub}>Alertas e atualizações</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={16} color={colors.textLight} />
+            </TouchableOpacity>
+            
+            {isBolsista && (
+              <>
+                <Divider />
+                <TouchableOpacity style={styles.row} activeOpacity={0.7}
+                  onPress={() => navigation.navigate("painelBolsista")}>
+                  <View style={styles.rowIcon}>
+                    <Ionicons name="shield-outline" size={18} color={colors.primaryDark} />
+                  </View>
+                  <View style={styles.rowBody}>
+                    <Text style={styles.rowLabel}>Painel Bolsista</Text>
+                    <Text style={styles.rowSub}>Confirmar e devolver itens</Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={16} color={colors.textLight} />
+                </TouchableOpacity>
+              </>
+            )}
+
+            {isAdmin && (
+              <>
+                <Divider />
+                <TouchableOpacity style={styles.row} activeOpacity={0.7}
+                  onPress={() => navigation.navigate("painelAdmin")}>
+                  <View style={styles.rowIcon}>
+                    <Ionicons name="settings-outline" size={18} color={colors.primaryDark} />
+                  </View>
+                  <View style={styles.rowBody}>
+                    <Text style={styles.rowLabel}>Painel Administrador</Text>
+                    <Text style={styles.rowSub}>Gestão de usuários e relatórios</Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={16} color={colors.textLight} />
+                </TouchableOpacity>
+              </>
+            )}
+          </View>
+
           {/* ── Suporte ── */}
           <SectionLabel title="Suporte" />
           <View style={styles.card}>
@@ -556,6 +624,7 @@ export default function Dashboard({ navigation }) {
 
       </View>
     </KeyboardAvoidingView>
+
   );
 }
 

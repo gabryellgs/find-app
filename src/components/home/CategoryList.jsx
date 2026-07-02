@@ -1,18 +1,57 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { ScrollView, TouchableOpacity, Text, StyleSheet } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { fetchCategories } from "../../services/api";
 
-const categories = [
-  { label: "Todos",  icon: "apps" },
-  { label: "Comida", icon: "fast-food" },
-  { label: "Carro",  icon: "car" },
-  { label: "Casa",   icon: "home" },
-  { label: "Tech",   icon: "phone-portrait" },
-  { label: "Moda",   icon: "shirt" },
-];
+const CATEGORY_ICONS = {
+  "eletronicos": "phone-portrait-outline",
+  "documentos": "card-outline",
+  "objetos pessoais": "wallet-outline",
+  "vestuario": "shirt-outline",
+  "livros e papelaria": "book-outline",
+  "outros": "cube-outline",
+};
 
-export default function CategoryList() {
+function getIconForCategory(nome) {
+  const key = (nome || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  return CATEGORY_ICONS[key] || "cube-outline";
+}
+
+export default function CategoryList({ onSelect }) {
   const [active, setActive] = useState(0);
+  const [categories, setCategories] = useState([{ id: null, label: "Todos", icon: "apps" }]);
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const data = await fetchCategories();
+        if (data?.results) {
+          const apiCats = data.results.map((c) => ({
+            id: c.id,
+            label: c.nome,
+            icon: getIconForCategory(c.nome),
+          }));
+          setCategories([{ id: null, label: "Todos", icon: "apps" }, ...apiCats]);
+        }
+      } catch (e) {
+        setCategories([
+          { id: null, label: "Todos", icon: "apps" },
+          { id: 1, label: "Eletrônicos", icon: "phone-portrait-outline" },
+          { id: 2, label: "Documentos", icon: "card-outline" },
+          { id: 3, label: "Objetos Pessoais", icon: "wallet-outline" },
+          { id: 4, label: "Vestuário", icon: "shirt-outline" },
+          { id: 5, label: "Livros e Papelaria", icon: "book-outline" },
+          { id: 6, label: "Outros", icon: "cube-outline" },
+        ]);
+      }
+    };
+    load();
+  }, []);
+
+  const handleSelect = (index, catId) => {
+    setActive(index);
+    if (onSelect) onSelect(catId);
+  };
 
   return (
     <ScrollView
@@ -24,7 +63,7 @@ export default function CategoryList() {
       {categories.map((cat, i) => (
         <TouchableOpacity
           key={i}
-          onPress={() => setActive(i)}
+          onPress={() => handleSelect(i, cat.id)}
           style={[styles.cat, active === i && styles.catActive]}
           activeOpacity={0.7}
         >

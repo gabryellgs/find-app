@@ -20,6 +20,9 @@ import ChatConversa from "./src/screens/ChatConversa";
 import Busca from "./src/screens/Busca";
 import Notificacoes from "./src/screens/Notificacoes";
 import DetalheItem from "./src/screens/DetalheItem";
+import MeusItens from "./src/screens/MeusItens";
+import PainelBolsista from "./src/screens/PainelBolsista";
+import PainelAdmin from "./src/screens/PainelAdmin";
 
 const colors = {
   primary: "#90dbf4",
@@ -169,6 +172,9 @@ export default function App() {
           <Stack.Screen name="cadastrar" component={CadastrarItem} options={{ presentation: "modal" }} />
           <Stack.Screen name="notificacoes" component={Notificacoes} />
           <Stack.Screen name="DetalheItem" component={DetalheItem} />
+          <Stack.Screen name="meusItens" component={MeusItens} />
+          <Stack.Screen name="painelBolsista" component={PainelBolsista} />
+          <Stack.Screen name="painelAdmin" component={PainelAdmin} />
         </Stack.Navigator>
       </NavigationContainer>
     </SafeAreaProvider>

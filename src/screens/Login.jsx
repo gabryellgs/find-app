@@ -14,42 +14,44 @@ import {
 
 import { useRef, useEffect, useState } from "react";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
 import LogoFind from "../components/layout/LogoFind";
-import auth from '../services/auth';
+import * as auth from "../services/auth";
+import * as WebBrowser from "expo-web-browser";
+import * as Google from "expo-auth-session/providers/google";
+import { fetchStats } from "../services/api";
+
+WebBrowser.maybeCompleteAuthSession();
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get("window");
 const isMobile = screenWidth < 768;
 
+// ─── Paleta (mesma do Register) ───────────────────────────────────────────────
 const colors = {
-  button:        '#1eaed4',
-  buttonDeep:    '#1596b8',
-  buttonDarker:  '#0f7a99',
-  surface:       '#FFFFFF',
-  surfaceAlt:    '#f4fafd',
-  surfaceDeep:   '#eaf6fb',
-  text:          '#06101f',
-  textMuted:     '#6B7898',
-  textLight:     '#1eaed4',
-  accent:        '#ddf3fc',
-  accentStrong:  '#b8e9fa',
-  // Hero top area (azul)
-  heroTop:       '#1eaed4',
-  heroTopDeep:   '#1596b8',
-  heroTopDark:   '#0e7fa0',
-  heroBorder:    'rgba(255,255,255,0.18)',
-  heroText:      'rgba(255,255,255,0.80)',
-  // inputs / card
-  border:        'rgba(0, 30, 100, 0.07)',
-  borderAccent:  'rgba(30, 174, 212, 0.22)',
-  borderStrong:  'rgba(30, 174, 212, 0.40)',
-  error:         '#e8514a',
-  errorBg:       '#fff5f5',
-  errorBorder:   'rgba(232, 81, 74, 0.25)',
+  button:        "#6dcef0",
+  buttonDeep:    "#092e3b",
+  buttonDarker:  "#061f28",
+  surface:       "#FFFFFF",
+  surfaceAlt:    "#f4fafd",
+  surfaceDeep:   "#eaf6fb",
+  text:          "#06101f",
+  textMuted:     "#6B7898",
+  textLight:     "#0B3A4A",
+  accent:        "#ddf3fc",
+  accentStrong:  "#b8e9fa",
+  heroBorder:    "rgba(255,255,255,0.25)",
+  border:        "rgba(0, 30, 100, 0.07)",
+  borderAccent:  "rgba(11, 58, 74, 0.20)",
+  borderStrong:  "rgba(11, 58, 74, 0.35)",
+  error:         "#e8514a",
+  errorBg:       "#fff5f5",
+  errorBorder:   "rgba(232, 81, 74, 0.25)",
+  hero:          "#90dbf4",
+  heroDeep:      "#6dcef0",
 };
 
-// ─── Staggered fade+slide ────────────────────────────────────────────────────
+// ─── Staggered fade+slide ─────────────────────────────────────────────────────
 function FadeSlide({ delay = 0, children, style }) {
   const fade  = useRef(new Animated.Value(0)).current;
   const slide = useRef(new Animated.Value(16)).current;
@@ -68,12 +70,11 @@ function FadeSlide({ delay = 0, children, style }) {
   );
 }
 
-// ─── Floating label input ────────────────────────────────────────────────────
+// ─── Input Field ──────────────────────────────────────────────────────────────
 function InputField({ label, icon, value, onChangeText, secureEntry, keyboardType, autoCapitalize, error }) {
   const [focused, setFocused] = useState(false);
   const [visible, setVisible] = useState(false);
   const borderAnim = useRef(new Animated.Value(0)).current;
-
 
   const onFocus = () => {
     setFocused(true);
@@ -115,10 +116,10 @@ function InputField({ label, icon, value, onChangeText, secureEntry, keyboardTyp
           onFocus={onFocus}
           onBlur={onBlur}
           secureTextEntry={secureEntry && !visible}
-          keyboardType={keyboardType || 'default'}
-          autoCapitalize={autoCapitalize || 'none'}
+          keyboardType={keyboardType || "default"}
+          autoCapitalize={autoCapitalize || "none"}
           autoCorrect={false}
-          placeholderTextColor={colors.textMuted}
+          placeholderTextColor={colors.textMuted + "90"}
           placeholder={label}
           underlineColorAndroid="transparent"
         />
@@ -133,7 +134,7 @@ function InputField({ label, icon, value, onChangeText, secureEntry, keyboardTyp
         )}
       </Animated.View>
       {error && (
-        <View style={styles.errorRow}>
+        <View style={styles.feedbackRow}>
           <Ionicons name="alert-circle-outline" size={12} color={colors.error} />
           <Text style={styles.errorText}>{error}</Text>
         </View>
@@ -142,7 +143,7 @@ function InputField({ label, icon, value, onChangeText, secureEntry, keyboardTyp
   );
 }
 
-// ─── Loading dots ────────────────────────────────────────────────────────────
+// ─── Loading Dots ─────────────────────────────────────────────────────────────
 function LoadingDots() {
   const dots = [0, 1, 2].map(() => useRef(new Animated.Value(0)).current);
 
@@ -161,13 +162,13 @@ function LoadingDots() {
   }, []);
 
   return (
-    <View style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+    <View style={{ flexDirection: "row", gap: 6, alignItems: "center" }}>
       {dots.map((dot, i) => (
         <Animated.View
           key={i}
           style={{
             width: 7, height: 7, borderRadius: 4,
-            backgroundColor: '#fff',
+            backgroundColor: "#fff",
             opacity: dot,
             transform: [{ scale: dot.interpolate({ inputRange: [0, 1], outputRange: [0.6, 1] }) }],
           }}
@@ -177,14 +178,56 @@ function LoadingDots() {
   );
 }
 
-// ─── Main screen ─────────────────────────────────────────────────────────────
+// ─── Main Screen ──────────────────────────────────────────────────────────────
 export default function Login({ onLogin, onGoToRegister, onBack }) {
-  const insets = useSafeAreaInsets();
+  const insets     = useSafeAreaInsets();
+  const navigation = useNavigation();
 
-  const [email,    setEmail]    = useState('');
-  const [password, setPassword] = useState('');
+  const [email,    setEmail]    = useState("");
+  const [password, setPassword] = useState("");
   const [errors,   setErrors]   = useState({});
   const [loading,  setLoading]  = useState(false);
+  const [stats, setStats] = useState({ devolvidos: 0, total: 0, encontrados: 0 });
+
+  useEffect(() => {
+    fetchStats().then(res => {
+      if (res && res.data) setStats(res.data);
+    }).catch(() => {});
+  }, []);
+
+  // Configuração Google Auth
+  const [request, response, promptAsync] = Google.useAuthRequest({
+    androidClientId: "",
+    iosClientId: "",
+    webClientId: "1040008461633-2do9scjtl937vmt0pflpeuml57jr11ke.apps.googleusercontent.com",
+    expoClientId: "1040008461633-2do9scjtl937vmt0pflpeuml57jr11ke.apps.googleusercontent.com",
+  });
+
+  useEffect(() => {
+    if (response?.type === "success") {
+      const { id_token } = response.params;
+      if (id_token) {
+        handleGoogleLogin(id_token);
+      } else {
+        // As vezes o Expo retorna um authentication object em vez de id_token nos params diretos
+        const token = response.authentication?.idToken;
+        if (token) handleGoogleLogin(token);
+      }
+    }
+  }, [response]);
+
+  const handleGoogleLogin = async (idToken) => {
+    setLoading(true);
+    setErrors({});
+    try {
+      await auth.googleLogin(idToken);
+      setLoading(false);
+      navigation.navigate("main");
+    } catch (err) {
+      setLoading(false);
+      setErrors({ general: err.message || "Erro ao fazer login com Google" });
+    }
+  };
 
   const btnScale   = useRef(new Animated.Value(1)).current;
   const onPressIn  = () => Animated.spring(btnScale, { toValue: 0.97, useNativeDriver: true, speed: 30 }).start();
@@ -192,13 +235,11 @@ export default function Login({ onLogin, onGoToRegister, onBack }) {
 
   const validate = () => {
     const e = {};
-    if (!email.trim())             e.email    = 'Informe seu e-mail ou usuário';
-    if (!password)                 e.password = 'Informe sua senha';
-    else if (password.length < 6)  e.password = 'Mínimo 6 caracteres';
+    if (!email.trim())            e.email    = "Informe seu e-mail ou usuário";
+    if (!password)                e.password = "Informe sua senha";
+    else if (password.length < 6) e.password = "Mínimo 6 caracteres";
     return e;
   };
-
-  const navigation = useNavigation();
 
   const handleLogin = async () => {
     const e = validate();
@@ -208,17 +249,17 @@ export default function Login({ onLogin, onGoToRegister, onBack }) {
     try {
       await auth.login(email, password);
       setLoading(false);
-      navigation.navigate('main');
+      navigation.navigate("main");
     } catch (err) {
       setLoading(false);
-      setErrors({ general: err.message || 'Erro ao autenticar' });
+      setErrors({ general: err.message || "Usuário ou senha incorretos" });
     }
   };
 
   return (
     <KeyboardAvoidingView
       style={styles.root}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      behavior={Platform.OS === "ios" ? "padding" : Platform.OS === "android" ? "height" : undefined}
     >
       <ScrollView
         contentContainerStyle={styles.scroll}
@@ -227,54 +268,55 @@ export default function Login({ onLogin, onGoToRegister, onBack }) {
         bounces={false}
       >
 
-        {/* ── TOPO AZUL ───────────────────────────────────────────────────── */}
+        {/* ── HERO AZUL ───────────────────────────────────────────────────── */}
         <View style={[styles.heroTop, { paddingTop: insets.top + 16 }]}>
 
-          {/* Orbs decorativos dentro do azul */}
+          {/* Orbs decorativos */}
           <View style={styles.heroOrb1} pointerEvents="none" />
           <View style={styles.heroOrb2} pointerEvents="none" />
+          <View style={styles.heroOrb3} pointerEvents="none" />
 
           {/* Botão voltar */}
           {onBack && (
             <FadeSlide delay={0}>
               <TouchableOpacity style={styles.backBtn} onPress={onBack} activeOpacity={0.75}>
-                <Ionicons name="arrow-back" size={18} color="#fff" />
+                <Ionicons name="chevron-back" size={19} color="#fff" />
               </TouchableOpacity>
             </FadeSlide>
           )}
 
           {/* Logo */}
           <FadeSlide delay={60}>
-            <View style={styles.logoContainer}>
-              <LogoFind />  
+            <View style={styles.logoWrapper}>
+              <LogoFind size="md" />
             </View>
-            
           </FadeSlide>
 
           {/* Headline */}
-          <FadeSlide delay={130}>
-            <Text style={styles.heroTitle}>Bem-vindo de volta 👋</Text>
-            <Text style={styles.heroSub}>Entre na sua conta para continuar encontrando seus itens.</Text>
+          <FadeSlide delay={130} style={{ alignItems: "center", gap: 8 }}>
+            <Text style={styles.heroTitle}>Acesse sua conta</Text>
+            <Text style={styles.heroSub}>Gerencie seus itens perdidos e encontrados com agilidade e segurança.</Text>
           </FadeSlide>
 
           {/* Stats strip */}
           <FadeSlide delay={200}>
-            <View style={styles.heroStats}>
+            <View style={styles.benefitsRow}>
               {[
-                { icon: 'bag-check-outline', value: '40k+',  label: 'Recuperados' },
-                { icon: 'people-outline',    value: '12k+',  label: 'Usuários'    },
-                { icon: 'location-outline',  value: '210',   label: 'Cidades'     },
-              ].map(({ icon, value, label }, i) => (
-                <View key={label} style={[styles.heroStatItem, i < 2 && styles.heroStatBorder]}>
-                  <Ionicons name={icon} size={13} color="rgba(255,255,255,0.75)" />
-                  <Text style={styles.heroStatValue}>{value}</Text>
-                  <Text style={styles.heroStatLabel}>{label}</Text>
+                { icon: "bag-check-outline", text: `${stats.total} Cadastrados`  },
+                { icon: "shield-checkmark-outline", text: `${stats.devolvidos} Devolvidos`     },
+                { icon: "location-outline",  text: `${stats.encontrados} Achados`       },
+              ].map(({ icon, text }, i) => (
+                <View key={text} style={[styles.benefitItem, i < 2 && styles.benefitBorder]}>
+                  <View style={styles.benefitIconWrap}>
+                    <Ionicons name={icon} size={13} color="rgba(255,255,255,0.92)" />
+                  </View>
+                  <Text style={styles.benefitText}>{text}</Text>
                 </View>
               ))}
             </View>
           </FadeSlide>
 
-          {/* Wave divider */}
+          {/* Wave */}
           <View style={styles.wave} />
         </View>
 
@@ -283,51 +325,57 @@ export default function Login({ onLogin, onGoToRegister, onBack }) {
           <FadeSlide delay={260} style={styles.cardWrap}>
             <View style={styles.card}>
 
-              {/* General error */}
+              {/* Erro geral */}
               {errors.general && (
-                <View style={[styles.feedbackRow, { backgroundColor: colors.errorBg, borderColor: colors.errorBorder, borderWidth: 1, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8, marginBottom: 16 }]}>
+                <View style={styles.generalError}>
                   <Ionicons name="alert-circle" size={14} color={colors.error} />
                   <Text style={[styles.errorText, { flex: 1 }]}>{errors.general}</Text>
                 </View>
               )}
 
-              {/* Inputs */}
+              <View style={styles.cardHeader}>
+                <Text style={styles.cardTitle}>Entrar na conta</Text>
+                <Text style={styles.cardSubtitle}>Preencha suas credenciais abaixo</Text>
+              </View>
+
+              {/* E-mail */}
               <FadeSlide delay={320}>
                 <InputField
                   label="E-mail ou Usuário"
                   icon="mail-outline"
                   value={email}
-                  onChangeText={setEmail}
+                  onChangeText={(v) => { setEmail(v); setErrors(p => ({ ...p, email: undefined })); }}
                   keyboardType="default"
                   error={errors.email}
                 />
               </FadeSlide>
 
+              {/* Senha */}
               <FadeSlide delay={370}>
                 <InputField
                   label="Senha"
                   icon="lock-closed-outline"
                   value={password}
-                  onChangeText={setPassword}
+                  onChangeText={(v) => { setPassword(v); setErrors(p => ({ ...p, password: undefined })); }}
                   secureEntry
                   error={errors.password}
                 />
               </FadeSlide>
 
-              {/* Forgot */}
+              {/* Esqueci a senha */}
               <FadeSlide delay={410}>
                 <TouchableOpacity style={styles.forgotWrap} activeOpacity={0.7}>
                   <Text style={styles.forgotText}>Esqueceu a senha?</Text>
                 </TouchableOpacity>
               </FadeSlide>
 
-              {/* CTA */}
+              {/* Botão entrar */}
               <FadeSlide delay={460}>
                 <Pressable onPressIn={onPressIn} onPressOut={onPressOut} onPress={handleLogin}>
                   <Animated.View style={[
                     styles.btnLogin,
                     { transform: [{ scale: btnScale }] },
-                    loading && styles.btnLoading,
+                    loading && { opacity: 0.85 },
                   ]}>
                     {loading ? <LoadingDots /> : (
                       <>
@@ -354,13 +402,14 @@ export default function Login({ onLogin, onGoToRegister, onBack }) {
               {/* Social */}
               <FadeSlide delay={560}>
                 <View style={styles.socialRow}>
-                  <TouchableOpacity style={styles.socialBtn} activeOpacity={0.75}>
+                  <TouchableOpacity 
+                    style={styles.socialBtn} 
+                    activeOpacity={0.75} 
+                    onPress={() => promptAsync()}
+                    disabled={!request || loading}
+                  >
                     <Ionicons name="logo-google" size={18} color="#DB4437" />
                     <Text style={styles.socialText}>Google</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.socialBtn} activeOpacity={0.75}>
-                    <Ionicons name="logo-apple" size={18} color={colors.text} />
-                    <Text style={styles.socialText}>Apple</Text>
                   </TouchableOpacity>
                 </View>
               </FadeSlide>
@@ -368,11 +417,11 @@ export default function Login({ onLogin, onGoToRegister, onBack }) {
             </View>
           </FadeSlide>
 
-          {/* Register link */}
+          {/* Link para cadastro */}
           <FadeSlide delay={610}>
             <View style={styles.registerRow}>
               <Text style={styles.registerPrompt}>Não tem uma conta? </Text>
-              <TouchableOpacity onPress={() => navigation.navigate('register')} activeOpacity={0.7}>
+              <TouchableOpacity onPress={() => navigation.navigate("register")} activeOpacity={0.7}>
                 <Text style={styles.registerLink}>Cadastre-se grátis</Text>
               </TouchableOpacity>
             </View>
@@ -382,9 +431,9 @@ export default function Login({ onLogin, onGoToRegister, onBack }) {
           <FadeSlide delay={660}>
             <View style={styles.pillRow}>
               {[
-                { label: 'Seguro',    icon: 'shield-checkmark-outline' },
-                { label: 'Gratuito',  icon: 'gift-outline'             },
-                { label: 'Rápido',    icon: 'flash-outline'            },
+                { label: "Seguro",   icon: "shield-checkmark-outline" },
+                { label: "Gratuito", icon: "gift-outline"             },
+                { label: "Rápido",   icon: "flash-outline"            },
               ].map(({ label, icon }) => (
                 <View key={label} style={styles.pill}>
                   <Ionicons name={icon} size={11} color={colors.button} />
@@ -402,323 +451,221 @@ export default function Login({ onLogin, onGoToRegister, onBack }) {
   );
 }
 
+// ─── Styles ───────────────────────────────────────────────────────────────────
 const HERO_HEIGHT = screenHeight * 0.42;
 
 const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-    backgroundColor: colors.surface,
-  },
-  scroll: {
-    flexGrow: 1,
-  },
+  root:   { flex: 1, backgroundColor: colors.surface },
+  scroll: { flexGrow: 1 },
 
   // ── Hero azul ──
   heroTop: {
-    backgroundColor: colors.heroTop,
-    minHeight:       HERO_HEIGHT,
-    paddingHorizontal: isMobile ? 20 : 32,
-    paddingBottom:   52,           // espaço extra p/ o wave sobrepor
-    overflow:        'hidden',
-    position:        'relative',
+    backgroundColor:   colors.hero,
+    minHeight:         HERO_HEIGHT,
+    paddingHorizontal: isMobile ? 22 : 36,
+    paddingBottom:     56,
+    overflow:          "hidden",
+    position:          "relative",
+    gap:               18,
+    alignItems:        "center",
   },
   heroOrb1: {
-    position:        'absolute',
-    top:             -60, right: -70,
-    width:           220, height: 220,
-    borderRadius:    110,
-    backgroundColor: colors.buttonDarker,
-    opacity:         0.45,
+    position: "absolute", top: -80, right: -80,
+    width: 260, height: 260, borderRadius: 130,
+    backgroundColor: colors.heroDeep, opacity: 0.28,
   },
   heroOrb2: {
-    position:        'absolute',
-    bottom:          20, left: -50,
-    width:           160, height: 160,
-    borderRadius:    80,
-    backgroundColor: 'rgba(255,255,255,0.08)',
+    position: "absolute", bottom: 10, left: -60,
+    width: 200, height: 200, borderRadius: 100,
+    backgroundColor: "rgba(255,255,255,0.07)",
+  },
+  heroOrb3: {
+    position: "absolute", top: "30%", left: "20%",
+    width: 140, height: 140, borderRadius: 70,
+    backgroundColor: colors.hero, opacity: 0.10,
   },
 
   backBtn: {
-    width:           36,
-    height:          36,
-    borderRadius:    10,
-    backgroundColor: 'rgba(255,255,255,0.18)',
-    borderWidth:     1,
-    borderColor:     colors.heroBorder,
-    alignItems:      'center',
-    justifyContent:  'center',
-    marginBottom:    16,
-    alignSelf:       'flex-start',
+    width: 38, height: 38, borderRadius: 11,
+    backgroundColor: "rgba(255,255,255,0.15)",
+    borderWidth: 1, borderColor: colors.heroBorder,
+    alignItems: "center", justifyContent: "center",
+    alignSelf: "flex-start",
   },
 
-  logoRow: {
-    flexDirection:  'row',
-    alignItems:     'center',
-    gap:            8,
-    marginBottom:   20,
-    alignSelf:      'center',
+  logoWrapper: {
+    width: 120, height: 120, borderRadius: 60,
+    backgroundColor: colors.hero,
+    alignItems: "center", justifyContent: "center",
+    borderWidth: 2, borderColor: colors.heroBorder,
+    marginTop: 10, marginBottom: 14,
   },
-
-  logoContainer: {
-  width: '100%',
-  alignItems: 'center',
-  justifyContent: 'center',
-  marginBottom: 20,
-},
 
   heroTitle: {
-    fontSize:      isMobile ? 22 : 28,
-    fontWeight:    '900',
-    color:         '#fff',
-    textAlign:     'center',
-    letterSpacing: -0.3,
-    marginBottom:  8,
+    fontSize: isMobile ? 24 : 32, 
+    fontWeight: "900",
+    color: "#fff", 
+    textAlign: "center", 
+    letterSpacing: -0.6,
+    textShadowColor: "rgba(0, 50, 70, 0.15)",
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 6,
   },
   heroSub: {
-    fontSize:     isMobile ? 13.5 : 15,
-    color:        'rgba(255,255,255,0.78)',
-    textAlign:    'center',
-    lineHeight:   20,
-    marginBottom: 24,
-    maxWidth:     320,
-    alignSelf:    'center',
+    fontSize: isMobile ? 14 : 16,
+    color: "rgba(255,255,255,0.85)",
+    textAlign: "center", lineHeight: 21,
+    maxWidth: 320, alignSelf: "center",
   },
 
-  heroStats: {
-    flexDirection:   'row',
-    backgroundColor: 'rgba(255,255,255,0.14)',
-    borderRadius:    16,
-    borderWidth:     1,
-    borderColor:     colors.heroBorder,
-    overflow:        'hidden',
-    alignSelf:       'center',
-    width:           '100%',
-    maxWidth:        380,
+  benefitsRow: {
+    flexDirection: "row",
+    backgroundColor: "rgba(255,255,255,0.10)",
+    borderRadius: 16, borderWidth: 1, borderColor: colors.heroBorder,
+    overflow: "hidden", alignSelf: "center",
+    width: "100%", maxWidth: 390,
   },
-  heroStatItem: {
-    flex:           1,
-    alignItems:     'center',
-    paddingVertical: 12,
-    gap:            3,
+  benefitItem:  { flex: 1, alignItems: "center", paddingVertical: 13, gap: 6 },
+  benefitBorder: { borderRightWidth: 1, borderRightColor: colors.heroBorder },
+  benefitIconWrap: {
+    width: 30, height: 30, borderRadius: 9,
+    backgroundColor: "rgba(255,255,255,0.16)",
+    alignItems: "center", justifyContent: "center",
   },
-  heroStatBorder: {
-    borderRightWidth:  1,
-    borderRightColor:  colors.heroBorder,
-  },
-  heroStatValue: {
-    fontSize:      isMobile ? 17 : 20,
-    fontWeight:    '900',
-    color:         '#fff',
-    letterSpacing: -0.3,
-  },
-  heroStatLabel: {
-    fontSize:  10,
-    color:     'rgba(255,255,255,0.70)',
-    fontWeight: '500',
+  benefitText: {
+    fontSize: isMobile ? 9.5 : 10.5,
+    color: "rgba(255,255,255,0.85)",
+    fontWeight: "600", textAlign: "center",
   },
 
-  // Wave — aba arredondada branca sobre o azul
+  // Wave
   wave: {
-    position:        'absolute',
-    bottom:          -1,
-    left:            -20,
-    right:           -20,
-    height:          40,
-    backgroundColor: colors.surface,
-    borderTopLeftRadius:  32,
-    borderTopRightRadius: 32,
+    position: "absolute", bottom: -1, left: -20, right: -20,
+    height: 44, backgroundColor: colors.surface,
+    borderTopLeftRadius: 36, borderTopRightRadius: 36,
   },
 
   // ── Card area ──
   cardArea: {
-    flex:              1,
-    backgroundColor:   colors.surface,
-    paddingHorizontal: isMobile ? 20 : 32,
-    paddingTop:        8,
-    alignItems:        'center',
+    flex: 1, backgroundColor: colors.surface,
+    paddingHorizontal: isMobile ? 18 : 32,
+    paddingTop: 4, alignItems: "center",
   },
-
-  cardWrap: {
-    width:    '100%',
-    maxWidth: 440,
-  },
+  cardWrap: { width: "100%", maxWidth: 440 },
   card: {
-    backgroundColor: colors.surface,
-    borderRadius:    24,
-    borderWidth:     1,
-    borderColor:     colors.borderAccent,
-    paddingHorizontal: isMobile ? 20 : 32,
-    paddingVertical:   isMobile ? 24 : 32,
-    shadowColor:     colors.button,
-    shadowOffset:    { width: 0, height: 8 },
-    shadowOpacity:   0.09,
-    shadowRadius:    24,
-    elevation:       6,
+    backgroundColor: "#D3F0FC",
+    borderRadius: 20, borderWidth: 1, borderColor: colors.borderAccent,
+    paddingHorizontal: isMobile ? 18 : 28,
+    paddingVertical: isMobile ? 22 : 28,
+    shadowColor: colors.button,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.08, shadowRadius: 20, elevation: 5,
+  },
+  cardHeader:   { marginBottom: 20 },
+  cardTitle: {
+    fontSize: isMobile ? 18 : 20, fontWeight: "800",
+    color: colors.text, letterSpacing: -0.4, marginBottom: 3,
+  },
+  cardSubtitle: { fontSize: 13, color: colors.textMuted },
+
+  generalError: {
+    flexDirection: "row", alignItems: "center", gap: 7,
+    backgroundColor: colors.errorBg, borderColor: colors.errorBorder,
+    borderWidth: 1, borderRadius: 10,
+    paddingHorizontal: 12, paddingVertical: 10, marginBottom: 16,
   },
 
-  // Input
-  inputWrapper: {
-    marginBottom: 16,
-  },
+  // ── Inputs ──
+  inputWrapper: { marginBottom: 13 },
   inputLabel: {
-    fontSize:      12,
-    fontWeight:    '600',
-    color:         colors.textMuted,
-    marginBottom:  6,
-    letterSpacing: 0.3,
-    textTransform: 'uppercase',
+    fontSize: 11, fontWeight: "600", color: colors.textMuted,
+    marginBottom: 5, letterSpacing: 0.4, textTransform: "uppercase",
   },
   inputBox: {
-    flexDirection:     'row',
-    alignItems:        'center',
-    borderWidth:       1.5,
-    borderRadius:      12,
-    paddingHorizontal: 12,
-    height:            48,
+    flexDirection: "row", alignItems: "center",
+    borderWidth: 1.5, borderRadius: 12,
+    paddingHorizontal: 13, height: 50,
   },
-  inputIcon: {
-    marginRight: 8,
-  },
-  input: {
-    flex:            1,
-    fontSize:        15,
-    color:           colors.text,
-    paddingVertical: 0,
-  },
-  eyeBtn: {
-    padding: 4,
-  },
-  errorRow: {
-    flexDirection: 'row',
-    alignItems:    'center',
-    gap:           4,
-    marginTop:     5,
-  },
-  errorText: {
-    fontSize:   11.5,
-    color:      colors.error,
-    fontWeight: '500',
-  },
+  inputIcon: { marginRight: 9 },
+  input:     { flex: 1, fontSize: 15.5, color: colors.text, paddingVertical: 0, outlineStyle: "none" },
+  eyeBtn:    { padding: 5 },
+
+  feedbackRow: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 5 },
+  errorText:   { fontSize: 11.5, color: colors.error, fontWeight: "500" },
 
   forgotWrap: {
-    alignSelf:    'flex-end',
+    alignSelf: "flex-end",
     marginBottom: 20,
-    marginTop:    -4,
+    marginTop: -4,
   },
   forgotText: {
-    fontSize:   13,
-    color:      colors.button,
-    fontWeight: '600',
+    fontSize: 13, color: colors.button, fontWeight: "600",
   },
 
+  // ── Botão login ──
   btnLogin: {
-    flexDirection:     'row',
-    alignItems:        'center',
-    justifyContent:    'center',
-    gap:               10,
-    paddingVertical:   16,
-    borderRadius:      14,
-    backgroundColor:   colors.button,
-    marginBottom:      20,
-    shadowColor:       colors.button,
-    shadowOffset:      { width: 0, height: 6 },
-    shadowOpacity:     0.30,
-    shadowRadius:      16,
-    elevation:         6,
+    flexDirection: "row", alignItems: "center",
+    justifyContent: "center", gap: 10,
+    paddingVertical: 16, borderRadius: 13,
+    backgroundColor: colors.button, marginBottom: 22,
+    shadowColor: colors.buttonDarker,
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.28, shadowRadius: 14, elevation: 6,
   },
-  btnLoading: { opacity: 0.85 },
   btnLoginText: {
-    fontSize:      16,
-    fontWeight:    '800',
-    color:         '#fff',
-    letterSpacing: 0.3,
+    fontSize: 16, fontWeight: "800", color: "#fff", letterSpacing: 0.2,
   },
   btnArrow: {
-    width:           26,
-    height:          26,
-    borderRadius:    13,
-    backgroundColor: 'rgba(255,255,255,0.22)',
-    alignItems:      'center',
-    justifyContent:  'center',
+    width: 26, height: 26, borderRadius: 13,
+    backgroundColor: "rgba(255,255,255,0.22)",
+    alignItems: "center", justifyContent: "center",
   },
 
+  // ── Divider ──
   dividerRow: {
-    flexDirection: 'row',
-    alignItems:    'center',
-    gap:           10,
-    marginBottom:  16,
+    flexDirection: "row", alignItems: "center",
+    gap: 10, marginBottom: 16,
   },
   dividerLine: {
-    flex:            1,
-    height:          1,
-    backgroundColor: colors.border,
+    flex: 1, height: 1, backgroundColor: colors.border,
   },
   dividerText: {
-    fontSize:   12,
-    color:      colors.textMuted,
-    fontWeight: '500',
+    fontSize: 12, color: colors.textMuted, fontWeight: "500",
   },
 
-  socialRow: {
-    flexDirection: 'row',
-    gap:           10,
-  },
+  // ── Social ──
+  socialRow: { flexDirection: "row", gap: 10 },
   socialBtn: {
-    flex:              1,
-    flexDirection:     'row',
-    alignItems:        'center',
-    justifyContent:    'center',
-    gap:               8,
-    paddingVertical:   12,
-    borderRadius:      12,
-    backgroundColor:   colors.surfaceAlt,
-    borderWidth:       1,
-    borderColor:       colors.border,
+    flex: 1, flexDirection: "row",
+    alignItems: "center", justifyContent: "center",
+    gap: 8, paddingVertical: 12,
+    borderRadius: 12, backgroundColor: colors.surfaceAlt,
+    borderWidth: 1, borderColor: colors.border,
   },
   socialText: {
-    fontSize:   13.5,
-    fontWeight: '600',
-    color:      colors.text,
+    fontSize: 13.5, fontWeight: "600", color: colors.text,
   },
 
+  // ── Link cadastro ──
   registerRow: {
-    flexDirection:  'row',
-    justifyContent: 'center',
-    alignItems:     'center',
-    marginTop:      20,
-    marginBottom:   16,
+    flexDirection: "row", justifyContent: "center",
+    alignItems: "center", marginTop: 20, marginBottom: 16,
   },
-  registerPrompt: {
-    fontSize: 14,
-    color:    colors.textMuted,
-  },
-  registerLink: {
-    fontSize:   14,
-    color:      colors.button,
-    fontWeight: '700',
-  },
+  registerPrompt: { fontSize: 14, color: colors.textMuted },
+  registerLink:   { fontSize: 14, color: colors.button, fontWeight: "700" },
 
+  // ── Trust pills ──
   pillRow: {
-    flexDirection:  'row',
-    gap:            8,
-    flexWrap:       'wrap',
-    justifyContent: 'center',
-    marginBottom:   8,
+    flexDirection: "row", gap: 8,
+    flexWrap: "wrap", justifyContent: "center", marginBottom: 8,
   },
   pill: {
-    flexDirection:     'row',
-    alignItems:        'center',
-    gap:               5,
-    paddingVertical:   5,
-    paddingHorizontal: 12,
-    borderRadius:      20,
-    backgroundColor:   colors.surfaceDeep,
-    borderWidth:       1,
-    borderColor:       colors.borderAccent,
+    flexDirection: "row", alignItems: "center",
+    gap: 5, paddingVertical: 5, paddingHorizontal: 12,
+    borderRadius: 20, backgroundColor: colors.surfaceDeep,
+    borderWidth: 1, borderColor: colors.borderAccent,
   },
   pillText: {
-    fontSize:   11.5,
-    color:      colors.textLight,
-    fontWeight: '600',
+    fontSize: 11.5, color: colors.textLight, fontWeight: "600",
   },
 });

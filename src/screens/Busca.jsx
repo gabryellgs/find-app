@@ -16,9 +16,9 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
-import HomeHeader from "../components/search/HomeHeader";
-import SearchBar from "../components/search/SearchBar";
-import { fetchItems, apiStatusMap, searchByImage } from "../services/api";
+import HomeHeader from "../components/home/HomeHeader";
+import SearchBar from "../components/home/SearchBar";
+import { fetchItems, apiStatusMap, searchByImage, fetchCategories } from "../services/api";
 
 if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -36,14 +36,8 @@ const colors = {
   danger: "#EF4444",
 };
 
-const CATEGORIES = [
-  { id: "all", label: "Todos", icon: "apps-outline" },
-  { id: "pets", label: "Pets", icon: "paw-outline" },
-  { id: "docs", label: "Documentos", icon: "document-outline" },
-  { id: "electronics", label: "Eletrônicos", icon: "phone-portrait-outline" },
-  { id: "bags", label: "Bolsas", icon: "bag-outline" },
-  { id: "keys", label: "Chaves", icon: "key-outline" },
-];
+// Categories fetched dynamically from backend now
+// const CATEGORIES = [ ... ];
 
 function CategoryChip({ item, selected, onPress }) {
   return (
@@ -61,11 +55,36 @@ function CategoryChip({ item, selected, onPress }) {
 function ItemCard({ item }) {
   const title = item.title || item.titulo || "Sem título";
   const location = item.location || item.local || "Não informado";
-  const date = item.time || item.date || "Data não informada";
+  const date = item.time || item.date || item.data || item.criado_em || "Data não informada";
   const statusNormalized = (item.raw_status || item.status || "").toLowerCase();
-  const isLost = statusNormalized === "perdido" || item.type === "lost";
-  const color = isLost ? "#B32E29" : "#1F7A51";
-  const initials = (title.match(/\b\w/g) || []).slice(0, 2).join("").toUpperCase() || "??";
+  
+  let statusText = "Encontrado";
+  let statusColor = "#1F7A51"; // verde
+  let typeBadgeStyle = styles.typeFound;
+  let typeBadgeTextStyle = styles.typeFoundText;
+
+  if (statusNormalized === "perdido" || item.type === "lost") {
+    statusText = "Perdido";
+    statusColor = "#B32E29"; // vermelho
+    typeBadgeStyle = styles.typeLost;
+    typeBadgeTextStyle = styles.typeLostText;
+  } else if (statusNormalized === "devolvido") {
+    statusText = "Devolvido";
+    statusColor = "#185FA5"; // azul
+    typeBadgeStyle = styles.typeReturned;
+    typeBadgeTextStyle = styles.typeReturnedText;
+  } else if (statusNormalized === "confirmado") {
+    statusText = "Confirmado";
+    statusColor = "#0B3A4A"; // escuro
+    typeBadgeStyle = styles.typeConfirmed;
+    typeBadgeTextStyle = styles.typeConfirmedText;
+  } else if (statusNormalized === "pendente_confirmacao") {
+    statusText = "Pendente";
+    statusColor = "#D97706"; // laranja
+    typeBadgeStyle = styles.typePending;
+    typeBadgeTextStyle = styles.typePendingText;
+  }
+
   const matches = item.matches ?? 0;
   const imageUrl = item.photo || item.imagem || item.photo_url || "https://images.unsplash.com/photo-1594322436404-5a0526db4d13?q=80&w=800&auto=format&fit=crop";
 
@@ -75,9 +94,9 @@ function ItemCard({ item }) {
       <View style={styles.itemBody}>
         <View style={styles.itemRow}>
           <Text style={styles.itemTitle} numberOfLines={1}>{title}</Text>
-          <View style={[styles.typeBadge, isLost ? styles.typeLost : styles.typeFound]}>
-            <Text style={[styles.typeBadgeText, isLost ? styles.typeLostText : styles.typeFoundText]}>
-              {isLost ? "Perdido" : "Encontrado"}
+          <View style={[styles.typeBadge, typeBadgeStyle]}>
+            <Text style={[styles.typeBadgeText, typeBadgeTextStyle]}>
+              {statusText}
             </Text>
           </View>
         </View>
@@ -112,6 +131,23 @@ export default function Busca({ route }) {
   const [visualSearchLoading, setVisualSearchLoading] = useState(false);
   const [visualResults, setVisualResults] = useState([]);
   const [previewImage, setPreviewImage] = useState(null);
+  
+  const [categories, setCategories] = useState([{ id: "all", label: "Todos", icon: "apps-outline" }]);
+
+  const carregarCategorias = async () => {
+    try {
+      const data = await fetchCategories();
+      const loaded = Array.isArray(data) ? data : data.results || [];
+      const mapped = loaded.map(c => ({
+        id: c.id || c.nome,
+        label: c.nome || c.title || "Categoria",
+        icon: c.icon || "list-outline"
+      }));
+      setCategories([{ id: "all", label: "Todos", icon: "apps-outline" }, ...mapped]);
+    } catch (error) {
+      console.log("Erro categorias:", error);
+    }
+  };
 
   const carregarItens = async () => {
     try {
@@ -120,6 +156,7 @@ export default function Busca({ route }) {
       const response = await fetchItems({
         q: searchText,
         status: apiStatusMap[statusFiltro] || "todos",
+        categoria: selectedCategory === "all" ? null : selectedCategory,
         page: 1,
         perPage: 20,
       });
@@ -138,8 +175,12 @@ export default function Busca({ route }) {
   };
 
   useEffect(() => {
+    carregarCategorias();
+  }, []);
+
+  useEffect(() => {
     carregarItens();
-  }, [searchText, statusFiltro]);
+  }, [searchText, statusFiltro, selectedCategory]);
 
   useEffect(() => {
     if (route?.params?.visualSearchImageUri) {
@@ -154,18 +195,30 @@ export default function Busca({ route }) {
     const itemTitle = (item.title || item.titulo || "").toLowerCase();
     const itemLocation = (item.location || item.local || "").toLowerCase();
     const statusNormalized = (item.raw_status || item.status || "").toLowerCase();
-    const itemType = statusNormalized === "perdido" ? "Perdido" : statusNormalized === "achado" ? "Encontrado" : item.type === "lost" ? "Perdido" : item.type === "found" ? "Encontrado" : "";
+
+    // Mapping API statuses to Tab Labels
+    let itemTab = "Todos";
+    if (statusNormalized === "perdido") itemTab = "Perdido";
+    else if (statusNormalized === "achado") itemTab = "Encontrado";
+    else if (statusNormalized === "devolvido") itemTab = "Devolvido";
+    else if (statusNormalized === "confirmado") itemTab = "Confirmado";
+    else if (statusNormalized === "pendente_confirmacao") itemTab = "Pendente";
 
     const matchesQuery =
       searchText === "" ||
       itemTitle.includes(searchText.toLowerCase()) ||
       itemLocation.includes(searchText.toLowerCase());
 
-    const matchesCategory = selectedCategory === "all" || item.category === selectedCategory;
+    const matchesCategory = selectedCategory === "all" || 
+      item.categoria === selectedCategory || 
+      item.categoria_id === selectedCategory ||
+      item.category === selectedCategory ||
+      (item.categoria && item.categoria.id === selectedCategory) ||
+      (item.categoria && item.categoria.nome === selectedCategory);
 
     const matchesTab =
       statusFiltro === "Todos" ||
-      statusFiltro === itemType;
+      statusFiltro === itemTab;
 
     return matchesQuery && matchesCategory && matchesTab;
   });
@@ -281,6 +334,8 @@ export default function Busca({ route }) {
               { id: "Todos", label: "Todos" },
               { id: "Perdido", label: "Perdidos" },
               { id: "Encontrado", label: "Encontrados" },
+              { id: "Devolvido", label: "Devolvidos" },
+              { id: "Confirmado", label: "Confirmados" },
             ].map((tab) => (
               <TouchableOpacity
                 key={tab.id}
@@ -300,7 +355,7 @@ export default function Busca({ route }) {
       {/* Categorias horizontais */}
       <View style={styles.categoriesWrapper}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categories}>
-          {CATEGORIES.map((cat) => (
+          {categories.map((cat) => (
             <CategoryChip
               key={cat.id}
               item={cat}
@@ -451,9 +506,15 @@ const styles = StyleSheet.create({
   typeBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999 },
   typeLost: { backgroundColor: "#FEE2E2" },
   typeFound: { backgroundColor: "rgba(144,219,244,0.2)" },
+  typeReturned: { backgroundColor: "rgba(24,95,165,0.15)" },
+  typeConfirmed: { backgroundColor: "rgba(11,58,74,0.15)" },
+  typePending: { backgroundColor: "rgba(217,119,6,0.15)" },
   typeBadgeText: { fontSize: 11, fontWeight: "700" },
   typeLostText: { color: colors.danger },
   typeFoundText: { color: colors.primaryDark },
+  typeReturnedText: { color: "#185FA5" },
+  typeConfirmedText: { color: "#0B3A4A" },
+  typePendingText: { color: "#D97706" },
   itemMeta: { flexDirection: "row", alignItems: "center", gap: 4 },
   itemMetaText: { fontSize: 12, color: colors.textMuted, fontWeight: "500" },
   itemFooter: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 2 },

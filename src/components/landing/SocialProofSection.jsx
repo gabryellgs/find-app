@@ -6,6 +6,7 @@ import {
 } from "react-native";
 import { useEffect, useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
+import { fetchStats } from "../../services/api";
 
 const { width: screenWidth } = Dimensions.get("window");
 const isMobile = screenWidth < 768;
@@ -25,11 +26,7 @@ const colors = {
   borderStrong: 'rgba(30, 174, 212, 0.35)',
 };
 
-const METRICS = [
-  { value: 98,   suffix: '%',  label: 'taxa de recuperação', icon: 'trending-up-outline'      },
-  { value: 40,   suffix: 'K+', label: 'itens encontrados',   icon: 'bag-check-outline'        },
-  { value: 4.9,  suffix: '★',  label: 'avaliação média',     icon: 'star-outline'             },
-];
+// Metrics are dynamically calculated
 
 function Counter({ target, suffix, style }) {
   const [val, setVal] = useState(0);
@@ -59,6 +56,30 @@ function Counter({ target, suffix, style }) {
 }
 
 export default function SocialProofSection() {
+  const [stats, setStats] = useState({ total: 0, encontrados: 0, devolvidos: 0 });
+
+  useEffect(() => {
+    fetchStats().then(res => {
+      if (res && res.data) setStats(res.data);
+    }).catch(() => {});
+  }, []);
+
+  let taxaRecuperacao = 0;
+  if (stats.encontrados > 0) {
+    taxaRecuperacao = Math.floor((stats.devolvidos / stats.encontrados) * 100);
+  } else if (stats.devolvidos > 0 && stats.total > 0) {
+    taxaRecuperacao = Math.floor((stats.devolvidos / stats.total) * 100);
+  }
+  if (taxaRecuperacao === 0 && stats.total > 0) {
+    taxaRecuperacao = (stats.devolvidos === stats.encontrados && stats.devolvidos > 0) ? 100 : 0;
+  }
+
+  const METRICS = [
+    { value: taxaRecuperacao, suffix: '%', label: 'taxa de recuperação', icon: 'trending-up-outline'      },
+    { value: stats.encontrados, suffix: '', label: 'itens achados',   icon: 'bag-check-outline'        },
+    { value: 4.9,  suffix: '★',  label: 'avaliação média',     icon: 'star-outline'             },
+  ];
+
   return (
     <View style={styles.wrapper}>
 

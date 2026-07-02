@@ -13,7 +13,11 @@ import {
 } from "react-native";
 import { useRef, useEffect, useState } from "react";
 import { useNavigation } from "@react-navigation/native";
-import auth from "../services/auth";
+import * as auth from "../services/auth";
+import * as WebBrowser from "expo-web-browser";
+import * as Google from "expo-auth-session/providers/google";
+
+WebBrowser.maybeCompleteAuthSession();
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import LogoFind from "../../src/components/layout/LogoFind" // ← sua logo real
@@ -193,7 +197,7 @@ function DateField({ label, value, onChange, error }) {
           style={styles.inputIcon}
         />
         <TextInput
-          style={[styles.input, { flex: 0.6, textAlign: "center" }]}
+          style={[styles.input, { flex: 0.6, textAlign: "center", minWidth: 0 }]}
           value={day}
           onChangeText={(v) => update(year, month, v.replace(/\D/g, "").slice(0, 2))}
           placeholder="DD"
@@ -206,7 +210,7 @@ function DateField({ label, value, onChange, error }) {
         />
         <Text style={styles.dateSep}>/</Text>
         <TextInput
-          style={[styles.input, { flex: 0.6, textAlign: "center" }]}
+          style={[styles.input, { flex: 0.6, textAlign: "center", minWidth: 0 }]}
           value={month}
           onChangeText={(v) => update(year, v.replace(/\D/g, "").slice(0, 2), day)}
           placeholder="MM"
@@ -219,7 +223,7 @@ function DateField({ label, value, onChange, error }) {
         />
         <Text style={styles.dateSep}>/</Text>
         <TextInput
-          style={[styles.input, { flex: 1, textAlign: "center" }]}
+          style={[styles.input, { flex: 1, textAlign: "center", minWidth: 0 }]}
           value={year}
           onChangeText={(v) => update(v.replace(/\D/g, "").slice(0, 4), month, day)}
           placeholder="AAAA"
@@ -332,6 +336,39 @@ export default function Register({ onBack, onGoToLogin }) {
   const [errors,         setErrors]         = useState({});
   const [loading,        setLoading]        = useState(false);
 
+  // Configuração Google Auth
+  const [request, response, promptAsync] = Google.useAuthRequest({
+    androidClientId: "",
+    iosClientId: "",
+    webClientId: "1040008461633-2do9scjtl937vmt0pflpeuml57jr11ke.apps.googleusercontent.com",
+    expoClientId: "1040008461633-2do9scjtl937vmt0pflpeuml57jr11ke.apps.googleusercontent.com",
+  });
+
+  useEffect(() => {
+    if (response?.type === "success") {
+      const { id_token } = response.params;
+      if (id_token) {
+        handleGoogleLogin(id_token);
+      } else {
+        const token = response.authentication?.idToken;
+        if (token) handleGoogleLogin(token);
+      }
+    }
+  }, [response]);
+
+  const handleGoogleLogin = async (idToken) => {
+    setLoading(true);
+    setErrors({});
+    try {
+      await auth.googleLogin(idToken);
+      setLoading(false);
+      navigation.navigate("main");
+    } catch (err) {
+      setLoading(false);
+      setErrors({ general: err.message || "Erro ao conectar com Google" });
+    }
+  };
+
   const btnScale   = useRef(new Animated.Value(1)).current;
   const onPressIn  = () => Animated.spring(btnScale, { toValue: 0.97, useNativeDriver: true, speed: 30 }).start();
   const onPressOut = () => Animated.spring(btnScale, { toValue: 1,    useNativeDriver: true, speed: 20 }).start();
@@ -386,7 +423,7 @@ export default function Register({ onBack, onGoToLogin }) {
   return (
     <KeyboardAvoidingView
       style={styles.root}
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      behavior={Platform.OS === "ios" ? "padding" : Platform.OS === "android" ? "height" : undefined}
     >
       <ScrollView
         contentContainerStyle={styles.scroll}
@@ -418,17 +455,17 @@ export default function Register({ onBack, onGoToLogin }) {
 
           {/* Headline */}
           <FadeSlide delay={130} style={{ alignItems: "center", gap: 8 }}>
-            <Text style={styles.heroTitle}>Dados da conta</Text>
-            <Text style={styles.heroSub}>Preencha para começar</Text>
+            <Text style={styles.heroTitle}>Crie sua conta</Text>
+            <Text style={styles.heroSub}>Junte-se à comunidade e tenha acesso completo à plataforma.</Text>
           </FadeSlide>
 
           {/* Benefícios */}
           <FadeSlide delay={200}>
             <View style={styles.benefitsRow}>
               {[
-                { icon: "flash-outline",            text: "Cadastro em 1 min"   },
-                { icon: "notifications-outline",    text: "Alertas automáticos" },
-                { icon: "shield-checkmark-outline", text: "100% gratuito"       },
+                { icon: "gift-outline",             text: "100% Gratuito"       },
+                { icon: "notifications-outline",    text: "Alertas rápidos"     },
+                { icon: "shield-checkmark-outline", text: "Totalmente seguro"   },
               ].map(({ icon, text }, i) => (
                 <View key={text} style={[styles.benefitItem, i < 2 && styles.benefitBorder]}>
                   <View style={styles.benefitIconWrap}>
@@ -583,13 +620,14 @@ export default function Register({ onBack, onGoToLogin }) {
 
               <FadeSlide delay={610}>
                 <View style={styles.socialRow}>
-                  <TouchableOpacity style={styles.socialBtn} activeOpacity={0.75}>
+                  <TouchableOpacity 
+                    style={styles.socialBtn} 
+                    activeOpacity={0.75} 
+                    onPress={() => promptAsync()}
+                    disabled={!request || loading}
+                  >
                     <Ionicons name="logo-google" size={18} color="#DB4437" />
                     <Text style={styles.socialText}>Google</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.socialBtn} activeOpacity={0.75}>
-                    <Ionicons name="logo-apple" size={18} color={colors.text} />
-                    <Text style={styles.socialText}>Apple</Text>
                   </TouchableOpacity>
                 </View>
               </FadeSlide>
@@ -635,7 +673,7 @@ const styles = StyleSheet.create({
   scroll: { flexGrow: 1 },
 
   heroTop: {
-    backgroundColor:   colors.button,
+    backgroundColor:   colors.hero,
     minHeight:         HERO_HEIGHT,
     paddingHorizontal: isMobile ? 22 : 36,
     paddingBottom:     56,
@@ -667,13 +705,20 @@ const styles = StyleSheet.create({
     alignSelf: "flex-start",
   },
   heroTitle: {
-    fontSize: isMobile ? 23 : 29, fontWeight: "800",
-    color: "#fff", textAlign: "center", letterSpacing: -0.5,
+    fontSize: isMobile ? 24 : 32, 
+    fontWeight: "900",
+    color: "#fff", 
+    textAlign: "center", 
+    letterSpacing: -0.6,
+    textShadowColor: "rgba(0, 50, 70, 0.15)",
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 6,
   },
   heroSub: {
-    fontSize: isMobile ? 13.5 : 15,
-    color: "rgba(255,255,255,0.72)",
+    fontSize: isMobile ? 14 : 16,
+    color: "rgba(255,255,255,0.85)",
     textAlign: "center", lineHeight: 21,
+    maxWidth: 320, alignSelf: "center",
   },
   benefitsRow: {
     flexDirection: "row",
@@ -719,7 +764,7 @@ const styles = StyleSheet.create({
   },
   cardWrap: { width: "100%", maxWidth: 440 },
   card: {
-    backgroundColor: colors.surface,
+    backgroundColor: "#D3F0FC",
     borderRadius: 20, borderWidth: 1, borderColor: colors.borderAccent,
     paddingHorizontal: isMobile ? 18 : 28,
     paddingVertical: isMobile ? 22 : 28,
@@ -752,7 +797,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 13, height: 50,
   },
   inputIcon: { marginRight: 9 },
-  input:     { flex: 1, fontSize: 15.5, color: colors.text, paddingVertical: 0 },
+  input:     { flex: 1, fontSize: 15.5, color: colors.text, paddingVertical: 0, outlineStyle: "none" },
   eyeBtn:    { padding: 5 },
   dateSep:   { fontSize: 16, color: colors.textMuted, marginHorizontal: 3 },
 

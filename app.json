@@ -2,6 +2,7 @@
   "expo": {
     "name": "front-find",
     "slug": "front-find",
+    "scheme": "findapp",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/logo/logo-find.webp",
@@ -24,6 +25,9 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "plugins": [
+      "expo-web-browser"
+    ]
   }
 }

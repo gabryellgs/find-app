@@ -22,6 +22,7 @@ import SearchBar from "../components/search/SearchBar";
 import CategoryList from "../components/home/CategoryList";
 import StatsRow from "../components/home/StatsRow";
 import { fetchItems } from "../services/api";
+import auth from "../services/auth";
 
 const { width: screenWidth } = Dimensions.get("window");
 // 🚀 PROPORÇÃO DE RESPEITO: 62% mantém o card imponente e mostra a fila perfeitamente
@@ -54,9 +55,20 @@ export default function Home({ navigation }) {
   const isFocused = useIsFocused();
   const [searchText, setSearchText] = useState("");
   const [statusFiltro, setStatusFiltro] = useState("Todos");
+  const [categoriaFiltro, setCategoriaFiltro] = useState(null);
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(false);
   const [apiError, setApiError] = useState(null);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [isBolsista, setIsBolsista] = useState(false);
+
+  const carregarDadosUsuario = async () => {
+    const user = await auth.getUser();
+    if (user) {
+      setIsAdmin(user.is_admin || false);
+      setIsBolsista(user.is_bolsista || false);
+    }
+  };
 
   const obterStatusTraduzidoAPI = (status) => {
     const mapa = { "Todos": "todos", "Perdido": "perdido", "Encontrado": "achado" };
@@ -119,6 +131,7 @@ export default function Home({ navigation }) {
       const data = await fetchItems({
         q: searchText,
         status: obterStatusTraduzidoAPI(statusFiltro),
+        categoria: categoriaFiltro,
         page: 1,
         perPage: 20,
       });
@@ -138,8 +151,9 @@ export default function Home({ navigation }) {
   useEffect(() => {
     if (isFocused) {
       carregarItens();
+      carregarDadosUsuario();
     }
-  }, [searchText, statusFiltro, isFocused]); 
+  }, [searchText, statusFiltro, categoriaFiltro, isFocused]); 
 
   // 🔥 CARD REDESENHADO: Sem botão e com metadados acoplados ao badge de status
   const renderCarouselCard = (item, index) => {
@@ -231,11 +245,8 @@ export default function Home({ navigation }) {
         
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Categorias</Text>
-          <TouchableOpacity activeOpacity={0.7} onPress={() => navigation.navigate("Busca")}> 
-            <Text style={styles.viewAllText}>Filtrar</Text>
-          </TouchableOpacity>
         </View>
-        <CategoryList />
+        <CategoryList onSelect={(catId) => { dispararAnimacaoMola(); setCategoriaFiltro(catId); }} />
 
         <StatsRow />
 
@@ -245,6 +256,54 @@ export default function Home({ navigation }) {
           <View style={styles.errorContainer}>
             <Ionicons name="alert-circle" size={18} color="#e8514a" />
             <Text style={styles.errorText}>{apiError}</Text>
+          </View>
+        )}
+
+        {/* 🚀 PAINEL DE GESTÃO RÁPIDO (SÓ BOLSISTA/ADMIN) */}
+        {(isAdmin || isBolsista) && (
+          <View style={{ paddingHorizontal: 16, marginTop: 4, marginBottom: 16 }}>
+            <View style={styles.sectionHeaderTitleGestao}>
+              <Text style={styles.sectionTitle}>Área de Gestão</Text>
+              <Text style={styles.sectionSubtitle}>Acesso restrito</Text>
+            </View>
+            <View style={styles.gestaoContainer}>
+              {isBolsista && (
+                <TouchableOpacity 
+                  activeOpacity={0.8} 
+                  style={styles.gestaoCard} 
+                  onPress={() => navigation.navigate("painelBolsista")}
+                >
+                  <View style={[styles.gestaoIconBg, { backgroundColor: "rgba(31, 122, 81, 0.15)" }]}>
+                    <Ionicons name="shield-checkmark" size={24} color={colors.success} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.gestaoTitle}>Painel Bolsista</Text>
+                    <Text style={styles.gestaoDesc}>Confirmar e devolver itens</Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={20} color={colors.textLight} />
+                </TouchableOpacity>
+              )}
+
+              {isAdmin && (
+                <>
+                  {isBolsista && <View style={styles.gestaoDivider} />}
+                  <TouchableOpacity 
+                    activeOpacity={0.8} 
+                    style={styles.gestaoCard} 
+                    onPress={() => navigation.navigate("painelAdmin")}
+                  >
+                    <View style={[styles.gestaoIconBg, { backgroundColor: "rgba(179, 46, 41, 0.15)" }]}>
+                      <Ionicons name="settings" size={24} color={colors.danger} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.gestaoTitle}>Painel Admin</Text>
+                      <Text style={styles.gestaoDesc}>Gestão completa do sistema</Text>
+                    </View>
+                    <Ionicons name="chevron-forward" size={20} color={colors.textLight} />
+                  </TouchableOpacity>
+                </>
+              )}
+            </View>
           </View>
         )}
 
@@ -408,4 +467,47 @@ const styles = StyleSheet.create({
   emptyText: { color: colors.textLight, fontSize: 12, fontStyle: "italic" },
   searchRow: { flexDirection: "row", alignItems: "center", gap: 10 },
   cameraBtn: { width: 44, height: 44, borderRadius: 14, backgroundColor: "rgba(255,255,255,0.5)", alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "rgba(255,255,255,0.3)" },
+
+  // Estilos da Gestão
+  sectionHeaderTitleGestao: { marginBottom: 12, gap: 2 },
+  gestaoContainer: {
+    backgroundColor: colors.surface,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: colors.border,
+    overflow: "hidden",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  gestaoCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 16,
+    gap: 12,
+  },
+  gestaoIconBg: {
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  gestaoTitle: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: colors.primaryDark,
+    marginBottom: 2,
+  },
+  gestaoDesc: {
+    fontSize: 12,
+    color: colors.textMuted,
+  },
+  gestaoDivider: {
+    height: 1,
+    backgroundColor: colors.border,
+    marginHorizontal: 16,
+  },
 });

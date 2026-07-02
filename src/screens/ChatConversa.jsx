@@ -6,7 +6,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { fetchChatMessages, sendChatMessage } from "../services/api";
+import { fetchChatMessages, sendChatMessage, API_BASE_URL } from "../services/api";
 
 const colors = {
   primary: "#90dbf4",
@@ -49,6 +49,8 @@ export default function ChatConversa({ navigation, route }) {
   const [error, setError] = useState(null);
   const pollingRef = useRef(null);
 
+  const wsRef = useRef(null);
+
   const carregarMensagens = useCallback(async () => {
     if (!chatId) return;
     try {
@@ -67,29 +69,78 @@ export default function ChatConversa({ navigation, route }) {
     }
   }, [chatId]);
 
-  // Carrega mensagens ao abrir e faz polling a cada 5s
+  // WebSocket e carga inicial
   useEffect(() => {
     carregarMensagens();
-    pollingRef.current = setInterval(carregarMensagens, 5000);
-    return () => {
-      if (pollingRef.current) clearInterval(pollingRef.current);
+
+    if (!chatId) return;
+
+    const wsProtocol = API_BASE_URL.startsWith("https") ? "wss" : "ws";
+    const wsUrl = `${API_BASE_URL.replace(/^https?/, wsProtocol)}/ws/chat/${chatId}/`;
+    
+    const ws = new WebSocket(wsUrl);
+    wsRef.current = ws;
+
+    ws.onopen = () => {
+      console.log("WebSocket connected to", wsUrl);
     };
-  }, [carregarMensagens]);
+
+    ws.onmessage = (e) => {
+      try {
+        const data = JSON.parse(e.data);
+        if (data.message && data.id) {
+          // Adiciona apenas se não for de quem enviou (is_me) e a API já não adicionou
+          // Ou simplesmente adiciona no estado e tira do enviar()
+          setMensagens((prev) => {
+             // previne duplicação
+             if (prev.find(m => m.id === data.id)) return prev;
+             
+             // O WebSocket devolve is_me relativo ao servidor, vamos adaptar.
+             // Para simplificar, a API REST ainda vai enviar as minhas mensagens localmente,
+             // então aqui precisamos garantir que não duplique.
+             return [...prev, data];
+          });
+          setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
+        }
+      } catch (err) {
+        console.error("Error parsing WS message:", err);
+      }
+    };
+
+    ws.onerror = (e) => {
+      console.error("WebSocket error:", e.message);
+    };
+
+    ws.onclose = () => {
+      console.log("WebSocket closed");
+    };
+
+    return () => {
+      ws.close();
+    };
+  }, [carregarMensagens, chatId]);
 
   async function enviar() {
     if (!texto.trim() || sending || !chatId) return;
-    try {
-      setSending(true);
-      const data = await sendChatMessage(chatId, texto.trim());
-      if (data?.ok && data?.data) {
-        setMensagens((prev) => [...prev, data.data]);
+    
+    // Se o socket estiver aberto, envia via socket. Senão, fallback via API.
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+       wsRef.current.send(JSON.stringify({ message: texto.trim() }));
+       setTexto("");
+    } else {
+      try {
+        setSending(true);
+        const data = await sendChatMessage(chatId, texto.trim());
+        if (data?.ok && data?.data) {
+          setMensagens((prev) => [...prev, data.data]);
+        }
+        setTexto("");
+        setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
+      } catch (e) {
+        console.log("Erro ao enviar via API:", e.message);
+      } finally {
+        setSending(false);
       }
-      setTexto("");
-      setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
-    } catch (e) {
-      console.log("Erro ao enviar:", e.message);
-    } finally {
-      setSending(false);
     }
   }
 

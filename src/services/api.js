@@ -57,6 +57,8 @@ export const apiStatusMap = {
   Encontrado: "achado",
   Perdido: "perdido",
   Devolvido: "devolvido",
+  Confirmado: "confirmado",
+  Pendente: "pendente_confirmacao",
 };
 
 // ─── Itens ──────────────────────────────────────────────────────────────────
@@ -222,4 +224,109 @@ export const sendChatMessage = async (chatId, conteudo) => {
       body: JSON.stringify({ conteudo }),
     })
   );
+};
+
+export const closeChat = async (chatId) => {
+  return handleResponse(
+    await authFetch(`${API}/chats/${chatId}/fechar/`, {
+      method: "POST",
+    })
+  );
+};
+
+// ─── Notificações ────────────────────────────────────────────────────────────
+
+export const fetchNotificacoes = async () => {
+  return handleResponse(await authFetch(`${API}/notificacoes/`));
+};
+
+export const marcarNotificacaoLida = async (id) => {
+  return handleResponse(
+    await authFetch(`${API}/notificacoes/${id}/lida/`, {
+      method: "POST",
+    })
+  );
+};
+
+export const marcarTodasLidas = async () => {
+  return handleResponse(
+    await authFetch(`${API}/notificacoes/marcar-todas-lidas/`, {
+      method: "POST",
+    })
+  );
+};
+
+// ─── QR Code ─────────────────────────────────────────────────────────────────
+
+export const getQrCodeUrl = (slug) => `${API}/items/qr/${slug}/imagem/`;
+
+export const qrScan = async (slug, observacao = "") => {
+  return handleResponse(
+    await authFetch(`${API}/items/qr/${slug}/scan/`, {
+      method: "POST",
+      body: JSON.stringify({ observacao }),
+    })
+  );
+};
+
+// ─── Bolsista ─────────────────────────────────────────────────────────────────
+
+export const fetchBolsistaPendentes = async ({ page = 1, perPage = 20 } = {}) => {
+  const params = new URLSearchParams({ page: String(page), per_page: String(perPage) });
+  return handleResponse(
+    await authFetch(`${API}/bolsista/pendentes/?${params.toString()}`)
+  );
+};
+
+export const bolsistaConfirmar = async (itemId, observacao = "") => {
+  return handleResponse(
+    await authFetch(`${API}/bolsista/${itemId}/confirmar/`, {
+      method: "POST",
+      body: JSON.stringify({ observacao }),
+    })
+  );
+};
+
+export const bolsistaDevolver = async (itemId, nomeRecebedor, observacao = "") => {
+  return handleResponse(
+    await authFetch(`${API}/bolsista/${itemId}/devolver/`, {
+      method: "POST",
+      body: JSON.stringify({ nome_recebedor: nomeRecebedor, observacao }),
+    })
+  );
+};
+
+export const fetchBolsistaMeuLog = async () => {
+  return handleResponse(await authFetch(`${API}/bolsista/meu-log/`));
+};
+
+// ─── Admin ───────────────────────────────────────────────────────────────────
+
+export const fetchAdminBolsistas = async () => {
+  return handleResponse(await authFetch(`${API}/admin/bolsistas/`));
+};
+
+export const adminAdicionarBolsista = async (email) => {
+  return handleResponse(
+    await authFetch(`${API}/admin/bolsistas/adicionar/`, {
+      method: "POST",
+      body: JSON.stringify({ email }),
+    })
+  );
+};
+
+export const adminRemoverBolsista = async (userId) => {
+  return handleResponse(
+    await authFetch(`${API}/admin/bolsistas/${userId}/remover/`, {
+      method: "DELETE",
+    })
+  );
+};
+
+export const fetchAdminRelatorio = async () => {
+  return handleResponse(await authFetch(`${API}/admin/relatorio/`));
+};
+
+export const fetchAdminLog = async () => {
+  return handleResponse(await authFetch(`${API}/admin/log/`));
 };

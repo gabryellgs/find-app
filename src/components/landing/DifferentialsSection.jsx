@@ -4,7 +4,9 @@ import {
   StyleSheet,
   Dimensions,
 } from "react-native";
+import { useEffect, useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
+import { fetchStats } from "../../services/api";
 
 const { width: screenWidth } = Dimensions.get("window");
 const isMobile = screenWidth < 768;
@@ -25,40 +27,50 @@ const colors = {
   borderStrong: 'rgba(30, 174, 212, 0.35)',
 };
 
-const differentials = [
-  {
-    icon:       'sparkles',
-    iconSecond: 'analytics-outline',
-    title:      'Tecnologia de matching por IA',
-    desc:       'Precisão de 94% na identificação de matches. O Find faz tudo por você, 24h por dia.',
-    hero:       true,
-    stats: [
-      { icon: 'trending-up-outline', value: '94%',  label: 'precisão'  },
-      { icon: 'time-outline',        value: '24h',  label: 'ativo'     },
-      { icon: 'flash-outline',       value: '18min', label: 'p/ match' },
-    ],
-  },
-  {
-    icon:  'shield-checkmark',
-    title: 'Privacidade total',
-    desc:  'Seus dados nunca são expostos. Comunicação mediada e verificada.',
-    tag:   { icon: 'lock-closed-outline', label: 'Criptografado' },
-  },
-  {
-    icon:  'timer',
-    title: 'Resposta em minutos',
-    desc:  'Tempo médio de 18min entre cadastro e primeiro contato.',
-    tag:   { icon: 'flash-outline', label: 'Tempo real' },
-  },
-  {
-    icon:  'people',
-    title: 'Comunidade ativa',
-    desc:  '120mil+ usuários verificados dispostos a ajudar.',
-    tag:   { icon: 'checkmark-circle-outline', label: '120k+ membros' },
-  },
-];
+// Differentials array will be computed dynamically inside the component
 
 export default function DifferentialsSection() {
+  const [stats, setStats] = useState({ total_usuarios: 0 });
+
+  useEffect(() => {
+    fetchStats().then(res => {
+      if (res && res.data) setStats(res.data);
+    }).catch(() => {});
+  }, []);
+
+  const differentials = [
+    {
+      icon:       'sparkles',
+      iconSecond: 'analytics-outline',
+      title:      'Tecnologia de matching por IA',
+      desc:       'Precisão de 94% na identificação de matches. O Find faz tudo por você, 24h por dia.',
+      hero:       true,
+      stats: [
+        { icon: 'trending-up-outline', value: '94%',  label: 'precisão'  },
+        { icon: 'time-outline',        value: '24h',  label: 'ativo'     },
+        { icon: 'flash-outline',       value: '18min', label: 'p/ match' },
+      ],
+    },
+    {
+      icon:  'shield-checkmark',
+      title: 'Privacidade total',
+      desc:  'Seus dados nunca são expostos. Comunicação mediada e verificada.',
+      tag:   { icon: 'lock-closed-outline', label: 'Criptografado' },
+    },
+    {
+      icon:  'timer',
+      title: 'Resposta em minutos',
+      desc:  'Tempo médio de 18min entre cadastro e primeiro contato.',
+      tag:   { icon: 'flash-outline', label: 'Tempo real' },
+    },
+    {
+      icon:  'people',
+      title: 'Comunidade ativa',
+      desc:  `Mais de ${stats.total_usuarios || 0} usuários no sistema, criando uma rede colaborativa forte.`,
+      tag:   { icon: 'checkmark-circle-outline', label: `${stats.total_usuarios || 0} membros` },
+    },
+  ];
+
   return (
     <View style={styles.section}>
 

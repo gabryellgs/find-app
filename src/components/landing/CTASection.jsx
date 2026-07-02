@@ -6,8 +6,9 @@ import {
   Animated,
   Pressable,
 } from "react-native";
-import { useRef } from "react";
+import { useRef, useEffect, useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
+import { fetchStats } from "../../services/api";
 
 const { width: screenWidth } = Dimensions.get("window");
 const isMobile = screenWidth < 768;
@@ -37,6 +38,14 @@ export default function CTASection({ onEnterApp }) {
   const onPressIn  = () => Animated.spring(btnScale, { toValue: 0.96, useNativeDriver: true, speed: 30 }).start();
   const onPressOut = () => Animated.spring(btnScale, { toValue: 1,    useNativeDriver: true, speed: 20 }).start();
 
+  const [stats, setStats] = useState({ encontrados: 0 });
+
+  useEffect(() => {
+    fetchStats().then(res => {
+      if (res && res.data) setStats(res.data);
+    }).catch(() => {});
+  }, []);
+
   return (
     <View style={styles.section}>
 
@@ -58,7 +67,7 @@ export default function CTASection({ onEnterApp }) {
 
       {/* Subtítulo */}
       <Text style={styles.sub}>
-        Mais de 40 mil itens recuperados.{'\n'}O seu pode ser o próximo.
+        Já temos {stats.encontrados} itens achados.{'\n'}O seu pode ser o próximo.
       </Text>
 
       {/* Pills */}

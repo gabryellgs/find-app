@@ -21,15 +21,12 @@ const colors = {
 
 // Ícones para categorias (fallback visual)
 const CATEGORY_ICONS = {
-  "eletrônico": "phone-portrait-outline",
-  "eletronico": "phone-portrait-outline",
-  "documento": "card-outline",
-  "chave": "key-outline",
-  "carteira": "bag-handle-outline",
-  "roupa": "shirt-outline",
-  "outro": "cube-outline",
-  "pet": "paw-outline",
-  "bolsa": "bag-outline",
+  "eletronicos": "phone-portrait-outline",
+  "documentos": "card-outline",
+  "objetos pessoais": "wallet-outline",
+  "vestuario": "shirt-outline",
+  "livros e papelaria": "book-outline",
+  "outros": "cube-outline",
 };
 
 function getIconForCategory(nome) {
@@ -63,12 +60,12 @@ export default function CadastrarItem({ navigation }) {
       } catch (e) {
         // Fallback estático caso a API falhe
         setCategorias([
-          { id: 1, label: "Eletrônico", icon: "phone-portrait-outline" },
-          { id: 2, label: "Documento", icon: "card-outline" },
-          { id: 3, label: "Chave", icon: "key-outline" },
-          { id: 4, label: "Carteira", icon: "bag-handle-outline" },
-          { id: 5, label: "Roupa", icon: "shirt-outline" },
-          { id: 6, label: "Outro", icon: "cube-outline" },
+          { id: 1, label: "Eletrônicos", icon: "phone-portrait-outline" },
+          { id: 2, label: "Documentos", icon: "card-outline" },
+          { id: 3, label: "Objetos Pessoais", icon: "wallet-outline" },
+          { id: 4, label: "Vestuário", icon: "shirt-outline" },
+          { id: 5, label: "Livros e Papelaria", icon: "book-outline" },
+          { id: 6, label: "Outros", icon: "cube-outline" },
         ]);
       }
     };
