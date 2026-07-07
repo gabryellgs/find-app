@@ -173,14 +173,32 @@ function DateField({ label, value, onChange, error }) {
     ],
   });
 
-  const parts = value ? value.split("-") : ["", "", ""];
-  const year  = parts[0] || "";
-  const month = parts[1] || "";
-  const day   = parts[2] || "";
+  const initialParts = value ? value.split("-") : ["", "", ""];
+  const [year, setYear] = useState(initialParts[0] || "");
+  const [month, setMonth] = useState(initialParts[1] || "");
+  const [day, setDay] = useState(initialParts[2] || "");
 
-  const update = (y, m, d) => {
-    if (y || m || d) onChange(`${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`);
+  // Só formata (zero-padding) o valor ISO emitido para o formulário — o texto
+  // exibido nos campos fica com o dígito "cru" para não travar a digitação.
+  const emitChange = (y, m, d) => {
+    if (y || m || d) onChange(`${y}-${(m || "").padStart(2, "0")}-${(d || "").padStart(2, "0")}`);
     else onChange("");
+  };
+
+  const handleDayChange = (v) => {
+    const clean = v.replace(/\D/g, "").slice(0, 2);
+    setDay(clean);
+    emitChange(year, month, clean);
+  };
+  const handleMonthChange = (v) => {
+    const clean = v.replace(/\D/g, "").slice(0, 2);
+    setMonth(clean);
+    emitChange(year, clean, day);
+  };
+  const handleYearChange = (v) => {
+    const clean = v.replace(/\D/g, "").slice(0, 4);
+    setYear(clean);
+    emitChange(clean, month, day);
   };
 
   return (
@@ -199,7 +217,7 @@ function DateField({ label, value, onChange, error }) {
         <TextInput
           style={[styles.input, { flex: 0.6, textAlign: "center", minWidth: 0 }]}
           value={day}
-          onChangeText={(v) => update(year, month, v.replace(/\D/g, "").slice(0, 2))}
+          onChangeText={handleDayChange}
           placeholder="DD"
           keyboardType="numeric"
           maxLength={2}
@@ -212,7 +230,7 @@ function DateField({ label, value, onChange, error }) {
         <TextInput
           style={[styles.input, { flex: 0.6, textAlign: "center", minWidth: 0 }]}
           value={month}
-          onChangeText={(v) => update(year, v.replace(/\D/g, "").slice(0, 2), day)}
+          onChangeText={handleMonthChange}
           placeholder="MM"
           keyboardType="numeric"
           maxLength={2}
@@ -225,7 +243,7 @@ function DateField({ label, value, onChange, error }) {
         <TextInput
           style={[styles.input, { flex: 1, textAlign: "center", minWidth: 0 }]}
           value={year}
-          onChangeText={(v) => update(v.replace(/\D/g, "").slice(0, 4), month, day)}
+          onChangeText={handleYearChange}
           placeholder="AAAA"
           keyboardType="numeric"
           maxLength={4}
