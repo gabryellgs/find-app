@@ -3,8 +3,10 @@ import {
   View, Text, FlatList, TouchableOpacity,
   StyleSheet, StatusBar, ActivityIndicator, Alert,
   RefreshControl, TextInput, Modal, KeyboardAvoidingView, Platform,
+  Dimensions,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { LineChart, BarChart } from "react-native-chart-kit";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useIsFocused } from "@react-navigation/native";
 import {
@@ -13,7 +15,36 @@ import {
   adminRemoverBolsista,
   fetchAdminRelatorio,
   fetchAdminLog,
+  fetchStats,
 } from "../services/api";
+
+const screenWidth = Dimensions.get("window").width;
+
+/** Agrupa a evolução mensal (vem quebrada por mês+status) em total por mês. */
+function agruparEvolucaoMensal(evolucaoMensal) {
+  const porMes = {};
+  (evolucaoMensal || []).forEach(({ mes, total }) => {
+    if (!mes) return;
+    const chave = String(mes).slice(0, 7); // "AAAA-MM"
+    porMes[chave] = (porMes[chave] || 0) + (total || 0);
+  });
+  const chaves = Object.keys(porMes).sort();
+  return {
+    labels: chaves.map((k) => k.slice(5)),
+    data: chaves.map((k) => porMes[k]),
+  };
+}
+
+const chartConfig = {
+  backgroundGradientFrom: "#FFFFFF",
+  backgroundGradientTo: "#FFFFFF",
+  decimalPlaces: 0,
+  color: (opacity = 1) => `rgba(11, 58, 74, ${opacity})`,
+  labelColor: (opacity = 1) => `rgba(90, 100, 128, ${opacity})`,
+  propsForDots: { r: "4", strokeWidth: "2", stroke: "#0B3A4A" },
+  propsForBackgroundLines: { stroke: "rgba(11,58,74,0.08)" },
+  barPercentage: 0.6,
+};
 
 const colors = {
   primary: "#90dbf4",
@@ -172,6 +203,7 @@ export default function PainelAdmin({ navigation }) {
   const isFocused = useIsFocused();
   const [aba, setAba] = useState("Relatório");
   const [relatorio, setRelatorio] = useState(null);
+  const [stats, setStats] = useState(null);
   const [bolsistas, setBolsistas] = useState([]);
   const [historico, setHistorico] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -181,14 +213,16 @@ export default function PainelAdmin({ navigation }) {
   const carregar = useCallback(async (isRefresh = false) => {
     try {
       isRefresh ? setRefreshing(true) : setLoading(true);
-      const [rData, bData, hData] = await Promise.all([
+      const [rData, bData, hData, sData] = await Promise.all([
         fetchAdminRelatorio(),
         fetchAdminBolsistas(),
         fetchAdminLog(),
+        fetchStats().catch(() => null),
       ]);
       setRelatorio(rData?.data ?? null);
       setBolsistas(bData?.results ?? []);
       setHistorico(hData?.results ?? []);
+      setStats(sData?.data ?? sData ?? null);
     } catch (e) {
       Alert.alert("Acesso Negado", "Você não tem permissão de administrador.");
       navigation.goBack();
@@ -274,19 +308,43 @@ export default function PainelAdmin({ navigation }) {
                 </>
               )}
 
-              {relatorio?.por_categoria && Object.keys(relatorio.por_categoria).length > 0 && (
-                <>
-                  <Text style={[styles.sectionLabel, { marginTop: 16 }]}>Por Categoria</Text>
-                  <View style={styles.statsGrid}>
-                    {Object.entries(relatorio.por_categoria).map(([catNome, catTotal]) => (
-                      <StatCard
-                        key={catNome}
-                        label={catNome}
-                        value={catTotal}
-                        icon="pricetag-outline"
-                        color="#6B7280"
+              {(() => {
+                const evolucao = agruparEvolucaoMensal(stats?.evolucao_mensal);
+                return evolucao.data.length >= 2 ? (
+                  <>
+                    <Text style={[styles.sectionLabel, { marginTop: 16 }]}>Evolução Mensal</Text>
+                    <View style={styles.chartCard}>
+                      <LineChart
+                        data={{ labels: evolucao.labels, datasets: [{ data: evolucao.data }] }}
+                        width={screenWidth - 56}
+                        height={180}
+                        chartConfig={chartConfig}
+                        bezier
+                        style={styles.chart}
+                        withInnerLines={false}
                       />
-                    ))}
+                    </View>
+                  </>
+                ) : null;
+              })()}
+
+              {stats?.por_categoria?.length > 0 && (
+                <>
+                  <Text style={[styles.sectionLabel, { marginTop: 16 }]}>Itens por Categoria</Text>
+                  <View style={styles.chartCard}>
+                    <BarChart
+                      data={{
+                        labels: stats.por_categoria.map((c) => c.categoria__nome || "Sem categoria"),
+                        datasets: [{ data: stats.por_categoria.map((c) => c.total) }],
+                      }}
+                      width={screenWidth - 56}
+                      height={200}
+                      chartConfig={chartConfig}
+                      style={styles.chart}
+                      fromZero
+                      showValuesOnTopOfBars
+                      withInnerLines={false}
+                    />
                   </View>
                 </>
               )}
@@ -440,6 +498,13 @@ const styles = StyleSheet.create({
   },
   statValue: { fontSize: 22, fontWeight: "800", color: colors.text, letterSpacing: -0.5 },
   statLabel: { fontSize: 12, color: colors.textMuted, fontWeight: "600" },
+
+  chartCard: {
+    backgroundColor: colors.surface, borderRadius: 16,
+    paddingVertical: 12, alignItems: "center",
+    borderWidth: 0.5, borderColor: colors.border,
+  },
+  chart: { borderRadius: 16 },
 
   periodoCard: {
     flexDirection: "row", alignItems: "center", gap: 10,

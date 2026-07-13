@@ -7,6 +7,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { fetchChatMessages, sendChatMessage, API_BASE_URL } from "../services/api";
+import haptics from "../services/haptics";
 
 const colors = {
   primary: "#90dbf4",
@@ -47,7 +48,10 @@ export default function ChatConversa({ navigation, route }) {
   const [sending, setSending] = useState(false);
   const [chatStatus, setChatStatus] = useState("ativo");
   const [error, setError] = useState(null);
+  const [otherTyping, setOtherTyping] = useState(false);
   const pollingRef = useRef(null);
+  const typingResetRef = useRef(null);
+  const lastTypingSentRef = useRef(0);
 
   const wsRef = useRef(null);
 
@@ -88,7 +92,17 @@ export default function ChatConversa({ navigation, route }) {
     ws.onmessage = (e) => {
       try {
         const data = JSON.parse(e.data);
+
+        if (data.type === "typing") {
+          setOtherTyping(true);
+          clearTimeout(typingResetRef.current);
+          typingResetRef.current = setTimeout(() => setOtherTyping(false), 3000);
+          return;
+        }
+
         if (data.message && data.id) {
+          setOtherTyping(false);
+          clearTimeout(typingResetRef.current);
           // Adiciona apenas se não for de quem enviou (is_me) e a API já não adicionou
           // Ou simplesmente adiciona no estado e tira do enviar()
           setMensagens((prev) => {
@@ -116,17 +130,28 @@ export default function ChatConversa({ navigation, route }) {
     };
 
     return () => {
+      clearTimeout(typingResetRef.current);
       ws.close();
     };
   }, [carregarMensagens, chatId]);
 
+  /** Avisa o outro participante que estou digitando (no máximo 1x a cada 2s). */
+  function notificarDigitando() {
+    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
+    const agora = Date.now();
+    if (agora - lastTypingSentRef.current < 2000) return;
+    lastTypingSentRef.current = agora;
+    wsRef.current.send(JSON.stringify({ type: "typing" }));
+  }
+
   async function enviar() {
     if (!texto.trim() || sending || !chatId) return;
-    
+
     // Se o socket estiver aberto, envia via socket. Senão, fallback via API.
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
        wsRef.current.send(JSON.stringify({ message: texto.trim() }));
        setTexto("");
+       haptics.tap();
     } else {
       try {
         setSending(true);
@@ -135,8 +160,10 @@ export default function ChatConversa({ navigation, route }) {
           setMensagens((prev) => [...prev, data.data]);
         }
         setTexto("");
+        haptics.tap();
         setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
       } catch (e) {
+        haptics.error();
         console.log("Erro ao enviar via API:", e.message);
       } finally {
         setSending(false);
@@ -173,7 +200,9 @@ export default function ChatConversa({ navigation, route }) {
 
         <View style={styles.headerInfo}>
           <Text style={styles.headerNome}>{nome}</Text>
-          {itemTitulo ? (
+          {otherTyping ? (
+            <Text style={[styles.headerStatus, styles.headerStatusTyping]}>digitando...</Text>
+          ) : itemTitulo ? (
             <Text style={styles.headerStatus} numberOfLines={1}>
               📦 {itemTitulo}
             </Text>
@@ -263,7 +292,7 @@ export default function ChatConversa({ navigation, route }) {
                     placeholder="Digite uma mensagem..."
                     placeholderTextColor={colors.textLight}
                     value={texto}
-                    onChangeText={setTexto}
+                    onChangeText={(v) => { setTexto(v); notificarDigitando(); }}
                     multiline
                     editable={!sending}
                   />
@@ -322,6 +351,7 @@ const styles = StyleSheet.create({
   headerInfo: { flex: 1 },
   headerNome: { fontSize: 15, fontWeight: "700", color: colors.primaryDark },
   headerStatus: { fontSize: 11, color: colors.primaryDark, opacity: 0.7, marginTop: 1 },
+  headerStatusTyping: { fontStyle: "italic", opacity: 1, fontWeight: "600" },
   headerBtn: {
     width: 36, height: 36, borderRadius: 18,
     backgroundColor: "rgba(255,255,255,0.3)",

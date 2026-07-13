@@ -7,7 +7,9 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as ImagePicker from "expo-image-picker";
+import * as Location from "expo-location";
 import { createItem, fetchCategories } from "../services/api";
+import haptics from "../services/haptics";
 
 if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -44,6 +46,8 @@ export default function CadastrarItem({ navigation }) {
   const [local, setLocal] = useState("");
   const [fotos, setFotos] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [coords, setCoords] = useState(null);
+  const [buscandoLocal, setBuscandoLocal] = useState(false);
 
   // Carrega categorias da API
   useEffect(() => {
@@ -111,6 +115,29 @@ export default function CadastrarItem({ navigation }) {
     setFotos((prev) => prev.filter((_, i) => i !== index));
   }
 
+  async function capturarLocalizacao() {
+    if (Platform.OS === "web") {
+      Alert.alert("Indisponível", "A captura de localização só funciona no app instalado no celular.");
+      return;
+    }
+    try {
+      setBuscandoLocal(true);
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== "granted") {
+        Alert.alert("Permissão negada", "Permita o acesso à localização para marcar onde o item foi visto.");
+        return;
+      }
+      const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+      setCoords({ latitude: pos.coords.latitude, longitude: pos.coords.longitude });
+      haptics.success();
+    } catch (e) {
+      haptics.error();
+      Alert.alert("Erro", "Não foi possível obter sua localização atual.");
+    } finally {
+      setBuscandoLocal(false);
+    }
+  }
+
   const handlePublicar = async () => {
     if (!categoria) { Alert.alert("Erro", "Selecione uma categoria."); return; }
     if (!titulo.trim()) { Alert.alert("Erro", "Insira um título."); return; }
@@ -124,6 +151,10 @@ export default function CadastrarItem({ navigation }) {
       formData.append("local", local.trim());
       formData.append("status", tipo === "Perdido" ? "perdido" : "achado");
       formData.append("categoria", categoria.id);
+      if (coords) {
+        formData.append("latitude", String(coords.latitude));
+        formData.append("longitude", String(coords.longitude));
+      }
 
       if (fotos.length > 0) {
         const uri = fotos[0];
@@ -135,11 +166,14 @@ export default function CadastrarItem({ navigation }) {
       const resData = await createItem(formData);
 
       if (resData?.ok) {
+        haptics.celebrate();
         Alert.alert("Sucesso! 🎉", "Item publicado com sucesso.", [{ text: "Ok", onPress: () => navigation.goBack() }]);
       } else {
+        haptics.error();
         Alert.alert("Erro", resData?.detail || "Falha ao publicar.");
       }
     } catch (e) {
+      haptics.error();
       Alert.alert("Erro", e.message || "Não foi possível conectar ao servidor.");
     } finally {
       setLoading(false);
@@ -203,6 +237,25 @@ export default function CadastrarItem({ navigation }) {
           <Text style={styles.inputLabel}>Local</Text>
           <TextInput style={styles.input} placeholder="Bairro ou cidade" placeholderTextColor={colors.textLight} value={local} onChangeText={setLocal} />
         </View>
+        <TouchableOpacity
+          style={styles.locBtn}
+          onPress={capturarLocalizacao}
+          disabled={buscandoLocal}
+          activeOpacity={0.8}
+        >
+          {buscandoLocal ? (
+            <ActivityIndicator size="small" color={colors.primaryDark} />
+          ) : (
+            <Ionicons
+              name={coords ? "checkmark-circle" : "locate-outline"}
+              size={16}
+              color={coords ? colors.success : colors.primaryDark}
+            />
+          )}
+          <Text style={[styles.locBtnText, coords && { color: colors.success }]}>
+            {coords ? "Localização atual anexada" : "Marcar minha localização atual no mapa"}
+          </Text>
+        </TouchableOpacity>
 
         <Text style={styles.sectionTitle}>Descrição detalhada</Text>
         <View style={[styles.inputCard, { alignItems: "flex-start", paddingTop: 14 }]}>
@@ -244,6 +297,8 @@ const styles = StyleSheet.create({
   inputLabel: { width: 80, fontSize: 14, color: colors.primaryDark, fontWeight: "700" },
   input: { flex: 1, fontSize: 14, color: colors.textDark, fontWeight: "500", paddingVertical: 14 },
   inputMultiline: { height: 80, paddingVertical: 0 },
+  locBtn: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 8, paddingHorizontal: 4, paddingVertical: 6 },
+  locBtnText: { fontSize: 12.5, fontWeight: "600", color: colors.primaryDark },
   submitBtn: { marginTop: 32, backgroundColor: colors.primary, borderRadius: 16, paddingVertical: 16, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, shadowColor: colors.primaryDark, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 8, elevation: 2 },
   submitText: { fontSize: 15, fontWeight: "700", color: colors.primaryDark },
 });

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, Fragment } from "react";
 import {
   View, Text, Image, StyleSheet, ScrollView,
   TouchableOpacity, StatusBar, ActivityIndicator, Alert, Modal, Share
@@ -7,6 +7,8 @@ import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { fetchItemDetail, startChat, deleteItem, changeItemStatus, getQrCodeUrl } from "../services/api";
 import auth from "../services/auth";
+import haptics from "../services/haptics";
+import ItemLocationMap from "../components/item/ItemLocationMap";
 
 const colors = {
   primary: "#90dbf4",
@@ -91,6 +93,92 @@ const qrStyles = StyleSheet.create({
 
 
 
+const TIMELINE_STEPS = [
+  { label: "Encontrado", icon: "hand-left" },
+  { label: "Confirmado no balcão", icon: "shield-checkmark" },
+  { label: "Devolvido", icon: "checkmark-done" },
+];
+
+/** Linha do tempo visual do percurso do item (achado → confirmado → devolvido). */
+function StatusTimeline({ status }) {
+  const statusLower = (status || "").toLowerCase();
+
+  if (statusLower === "perdido" || !statusLower || statusLower === "indefinido") {
+    return (
+      <View style={timelineStyles.lostBanner}>
+        <Ionicons name="warning" size={16} color={colors.danger} />
+        <Text style={timelineStyles.lostText}>
+          Perdido — aguardando alguém encontrar este item.
+        </Text>
+      </View>
+    );
+  }
+
+  const stepIndex = statusLower === "devolvido" ? 2 : statusLower === "confirmado" ? 1 : 0;
+
+  return (
+    <View style={timelineStyles.row}>
+      {TIMELINE_STEPS.map((step, i) => {
+        const state = i < stepIndex ? "done" : i === stepIndex ? "current" : "future";
+        return (
+          <Fragment key={step.label}>
+            <View style={timelineStyles.stepCol}>
+              <View
+                style={[
+                  timelineStyles.dot,
+                  state === "done" && timelineStyles.dotDone,
+                  state === "current" && timelineStyles.dotCurrent,
+                ]}
+              >
+                <Ionicons
+                  name={state === "done" ? "checkmark" : step.icon}
+                  size={13}
+                  color={state === "future" ? colors.textLight : "#fff"}
+                />
+              </View>
+              <Text style={[timelineStyles.stepLabel, state !== "future" && timelineStyles.stepLabelActive]}>
+                {step.label}
+              </Text>
+              {state === "current" && statusLower === "pendente_confirmacao" && (
+                <Text style={timelineStyles.stepHint}>aguardando bolsista</Text>
+              )}
+            </View>
+            {i < TIMELINE_STEPS.length - 1 && (
+              <View style={[timelineStyles.connector, i < stepIndex && timelineStyles.connectorDone]} />
+            )}
+          </Fragment>
+        );
+      })}
+    </View>
+  );
+}
+
+const timelineStyles = StyleSheet.create({
+  lostBanner: {
+    flexDirection: "row", alignItems: "center", gap: 8,
+    backgroundColor: "#FBECEA", borderRadius: 14, padding: 12,
+    borderWidth: 1, borderColor: "rgba(179,46,41,0.2)",
+  },
+  lostText: { flex: 1, fontSize: 12.5, color: colors.danger, fontWeight: "600" },
+  row: { flexDirection: "row", alignItems: "flex-start" },
+  stepCol: { alignItems: "center", width: 84, gap: 6 },
+  dot: {
+    width: 30, height: 30, borderRadius: 15,
+    backgroundColor: "#E2E8F0",
+    alignItems: "center", justifyContent: "center",
+  },
+  dotDone: { backgroundColor: colors.success },
+  dotCurrent: { backgroundColor: colors.info },
+  stepLabel: { fontSize: 10.5, fontWeight: "600", color: colors.textLight, textAlign: "center", lineHeight: 13 },
+  stepLabelActive: { color: colors.textDark, fontWeight: "700" },
+  stepHint: { fontSize: 9, color: colors.info, fontWeight: "700", textAlign: "center" },
+  connector: {
+    flex: 1, height: 2, backgroundColor: "#E2E8F0",
+    marginTop: 14, marginHorizontal: -8,
+  },
+  connectorDone: { backgroundColor: colors.success },
+});
+
 function formatDate(raw) {
   if (!raw) return "";
   if (typeof raw === "string" && raw.includes("-")) {
@@ -136,6 +224,8 @@ export default function DetalheItem({ route, navigation }) {
   const descricao = currentItem?.descricao || currentItem?.description || "Descrição não disponível.";
   const local = currentItem?.local || currentItem?.location || "Local não informado";
   const imagem = currentItem?.imagem || currentItem?.photo || currentItem?.photo_url || null;
+  const latitude = currentItem?.latitude ?? null;
+  const longitude = currentItem?.longitude ?? null;
   const status = currentItem?.status || "indefinido";
   const statusDisplay = currentItem?.status_display || status;
   const rawData = currentItem?.data || currentItem?.date || currentItem?.criado_em || "";
@@ -178,6 +268,7 @@ export default function DetalheItem({ route, navigation }) {
         Alert.alert("Erro", data?.detail || "Não foi possível iniciar o chat.");
       }
     } catch (e) {
+      haptics.error();
       Alert.alert("Erro", e.message || "Não foi possível iniciar o chat.");
     } finally {
       setActionLoading(false);
@@ -194,10 +285,12 @@ export default function DetalheItem({ route, navigation }) {
           try {
             setActionLoading(true);
             await deleteItem(itemId);
+            haptics.success();
             Alert.alert("Sucesso", "Item deletado.", [
               { text: "Ok", onPress: () => navigation.goBack() },
             ]);
           } catch (e) {
+            haptics.error();
             Alert.alert("Erro", e.message);
           } finally {
             setActionLoading(false);
@@ -223,8 +316,10 @@ export default function DetalheItem({ route, navigation }) {
               if (data?.ok && data?.data) {
                 setItemDetail(data.data);
               }
+              haptics.celebrate();
               Alert.alert("Sucesso", `Item marcado como ${labels[novoStatus]}!`);
             } catch (e) {
+              haptics.error();
               Alert.alert("Erro", e.message);
             } finally {
               setActionLoading(false);
@@ -336,12 +431,22 @@ export default function DetalheItem({ route, navigation }) {
             <Text style={styles.userText}>Publicado por {usuario}</Text>
           </View>
 
+          {/* Linha do tempo do status */}
+          <Text style={styles.sectionLabel}>Acompanhamento</Text>
+          <StatusTimeline status={status} />
+
           {/* Local */}
           <Text style={styles.sectionLabel}>Local do registro</Text>
           <View style={styles.infoCard}>
             <Ionicons name="location" size={16} color={colors.primaryDark} />
             <Text style={styles.infoText}>{local}</Text>
           </View>
+
+          {latitude != null && longitude != null && (
+            <View style={{ marginTop: 10 }}>
+              <ItemLocationMap latitude={latitude} longitude={longitude} />
+            </View>
+          )}
 
           {/* Descrição */}
           <Text style={styles.sectionLabel}>Descrição</Text>

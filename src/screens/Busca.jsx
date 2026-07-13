@@ -1,11 +1,11 @@
 import React, { useState, useRef, useEffect } from "react";
-import { 
-  View, 
-  Text, 
+import {
+  View,
+  Text,
   Image,
-  ScrollView, 
-  TouchableOpacity, 
-  StyleSheet, 
+  ScrollView,
+  TouchableOpacity,
+  StyleSheet,
   StatusBar,
   Platform,
   UIManager,
@@ -13,12 +13,15 @@ import {
   Modal,
   ActivityIndicator,
   Alert,
+  RefreshControl,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import HomeHeader from "../components/home/HomeHeader";
 import SearchBar from "../components/home/SearchBar";
+import Skeleton from "../components/ui/Skeleton";
 import { fetchItems, apiStatusMap, searchByImage, fetchCategories } from "../services/api";
+import haptics from "../services/haptics";
 
 if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -124,6 +127,7 @@ export default function Busca({ route, navigation }) {
   const [statusFiltro, setStatusFiltro] = useState("Todos");
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [apiError, setApiError] = useState(null);
 
   // Busca visual por imagem
@@ -181,6 +185,13 @@ export default function Busca({ route, navigation }) {
   useEffect(() => {
     carregarItens();
   }, [searchText, statusFiltro, selectedCategory]);
+
+  const handleRefresh = async () => {
+    haptics.tap();
+    setRefreshing(true);
+    await Promise.all([carregarItens(), carregarCategorias()]);
+    setRefreshing(false);
+  };
 
   useEffect(() => {
     if (route?.params?.visualSearchImageUri) {
@@ -250,11 +261,13 @@ export default function Busca({ route, navigation }) {
   };
 
   const alterarCategoria = (id) => {
+    haptics.tap();
     dispararAnimacaoMola();
     setSelectedCategory(id);
   };
 
   const alterarStatusFiltro = (status) => {
+    haptics.tap();
     dispararAnimacaoMola();
     setStatusFiltro(status);
   };
@@ -292,7 +305,9 @@ export default function Busca({ route, navigation }) {
     try {
       const resp = await searchByImage(uri);
       setVisualResults(resp.results || []);
+      haptics.success();
     } catch (e) {
+      haptics.error();
       Alert.alert("Erro", e.message || "N\u00e3o foi poss\u00edvel buscar por imagem.");
     } finally {
       setVisualSearchLoading(false);
@@ -367,19 +382,51 @@ export default function Busca({ route, navigation }) {
       </View>
 
       {/* Lista de Resultados */}
-      <ScrollView style={styles.body} showsVerticalScrollIndicator={false} contentContainerStyle={styles.bodyContent}>
+      <ScrollView
+        style={styles.body}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.bodyContent}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            tintColor={colors.primaryDark}
+            colors={[colors.primaryDark]}
+          />
+        }
+      >
         <Text style={styles.resultsLabel}>
           {filtered.length} resultado{filtered.length !== 1 ? "s" : ""} encontrado{filtered.length !== 1 ? "s" : ""}
         </Text>
 
-        {loading && <Text style={styles.statusText}>Carregando resultados...</Text>}
         {apiError && <Text style={styles.errorText}>{apiError}</Text>}
 
-        {filtered.length === 0 && !loading ? (
+        {loading && items.length === 0 ? (
+          <View style={styles.list}>
+            {[0, 1, 2].map((i) => (
+              <View key={i} style={styles.itemCard}>
+                <Skeleton width={84} height={84} borderRadius={16} />
+                <View style={{ flex: 1, gap: 6 }}>
+                  <Skeleton width="70%" height={14} />
+                  <Skeleton width="45%" height={11} />
+                  <Skeleton width="35%" height={11} />
+                </View>
+              </View>
+            ))}
+          </View>
+        ) : filtered.length === 0 ? (
           <View style={styles.empty}>
             <Ionicons name="search-outline" size={40} color={colors.textLight} />
             <Text style={styles.emptyTitle}>Nenhum resultado</Text>
             <Text style={styles.emptyText}>Tente ajustar os filtros ou usar outras palavras-chave.</Text>
+            <TouchableOpacity
+              style={styles.emptyCta}
+              activeOpacity={0.8}
+              onPress={() => navigation.navigate("cadastrar")}
+            >
+              <Ionicons name="add-circle" size={15} color={colors.primaryDark} />
+              <Text style={styles.emptyCtaText}>Cadastrar este item</Text>
+            </TouchableOpacity>
           </View>
         ) : (
           <View style={styles.list}>
@@ -536,6 +583,8 @@ const styles = StyleSheet.create({
   empty: { alignItems: "center", paddingTop: 80, gap: 10 },
   emptyTitle: { fontSize: 16, fontWeight: "700", color: colors.textMuted },
   emptyText: { fontSize: 13, color: colors.textLight, textAlign: "center", maxWidth: 240, lineHeight: 18 },
+  emptyCta: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 6, backgroundColor: "rgba(144,219,244,0.25)", paddingHorizontal: 14, paddingVertical: 9, borderRadius: 999 },
+  emptyCtaText: { fontSize: 12.5, fontWeight: "700", color: colors.primaryDark },
 
   // Visual Search Modal
   visualModal: { flex: 1, backgroundColor: colors.surface },

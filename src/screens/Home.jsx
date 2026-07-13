@@ -14,6 +14,7 @@ import {
   ActivityIndicator,
   Dimensions,
   Alert,
+  RefreshControl,
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import { useIsFocused } from "@react-navigation/native";
@@ -21,8 +22,10 @@ import HomeHeader from "../components/home/HomeHeader";
 import SearchBar from "../components/home/SearchBar";
 import CategoryList from "../components/home/CategoryList";
 import StatsRow from "../components/home/StatsRow";
+import Skeleton from "../components/ui/Skeleton";
 import { fetchItems } from "../services/api";
 import auth from "../services/auth";
+import haptics from "../services/haptics";
 
 const { width: screenWidth } = Dimensions.get("window");
 // 🚀 PROPORÇÃO DE RESPEITO: 62% mantém o card imponente e mostra a fila perfeitamente
@@ -58,6 +61,7 @@ export default function Home({ navigation }) {
   const [categoriaFiltro, setCategoriaFiltro] = useState(null);
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [apiError, setApiError] = useState(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [isBolsista, setIsBolsista] = useState(false);
@@ -153,7 +157,14 @@ export default function Home({ navigation }) {
       carregarItens();
       carregarDadosUsuario();
     }
-  }, [searchText, statusFiltro, categoriaFiltro, isFocused]); 
+  }, [searchText, statusFiltro, categoriaFiltro, isFocused]);
+
+  const handleRefresh = async () => {
+    haptics.tap();
+    setRefreshing(true);
+    await Promise.all([carregarItens(), carregarDadosUsuario()]);
+    setRefreshing(false);
+  };
 
   // 🔥 CARD REDESENHADO: Sem botão e com metadados acoplados ao badge de status
   const renderCarouselCard = (item, index) => {
@@ -218,6 +229,22 @@ export default function Home({ navigation }) {
     );
   };
 
+  const renderSkeletonRow = () => (
+    <View style={[styles.carouselContainer, { flexDirection: "row" }]}>
+      {[0, 1, 2].map((i) => (
+        <View key={i} style={styles.ifrnCard}>
+          <Skeleton width="100%" height={120} borderRadius={9} />
+          <View style={{ paddingVertical: 10, gap: 6 }}>
+            <Skeleton width="80%" height={14} />
+            <Skeleton width="55%" height={11} />
+          </View>
+        </View>
+      ))}
+    </View>
+  );
+
+  const isInitialLoading = loading && items.length === 0;
+
   return (
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor={colors.primary} />
@@ -241,8 +268,20 @@ export default function Home({ navigation }) {
         </View>
       </View>
 
-      <ScrollView style={styles.body} showsVerticalScrollIndicator={false} contentContainerStyle={styles.bodyContent}>
-        
+      <ScrollView
+        style={styles.body}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.bodyContent}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            tintColor={colors.primaryDark}
+            colors={[colors.primaryDark]}
+          />
+        }
+      >
+
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Categorias</Text>
         </View>
@@ -250,7 +289,9 @@ export default function Home({ navigation }) {
 
         <StatsRow />
 
-        {loading && <ActivityIndicator size="small" color={colors.primaryDark} style={{ marginVertical: 8, alignSelf: "flex-start", marginLeft: 16 }} />}
+        {loading && items.length > 0 && (
+          <ActivityIndicator size="small" color={colors.primaryDark} style={{ marginVertical: 8, alignSelf: "flex-start", marginLeft: 16 }} />
+        )}
 
         {apiError && (
           <View style={styles.errorContainer}>
@@ -312,12 +353,20 @@ export default function Home({ navigation }) {
           <Text style={styles.sectionTitle}>Destaques Recentes</Text>
           <Text style={styles.sectionSubtitle}>Últimas atualizações</Text>
         </View>
-        {recentItems.length > 0 ? (
+        {isInitialLoading ? (
+          renderSkeletonRow()
+        ) : recentItems.length > 0 ? (
           <ScrollView horizontal showsHorizontalScrollIndicator={false} snapToInterval={CARD_WIDTH + CARD_GAP} decelerationRate="fast" snapToAlignment="start" contentContainerStyle={styles.carouselContainer}>
             {recentItems.map((item, index) => renderCarouselCard(item, index))}
           </ScrollView>
         ) : (
-          <View style={styles.emptyContainer}><Text style={styles.emptyText}>Nenhum item recente.</Text></View>
+          <View style={styles.emptyContainer}>
+            <Text style={styles.emptyText}>Nenhum item recente.</Text>
+            <TouchableOpacity style={styles.emptyCta} activeOpacity={0.8} onPress={() => navigation.navigate("cadastrar")}>
+              <Ionicons name="add-circle" size={14} color={colors.primaryDark} />
+              <Text style={styles.emptyCtaText}>Cadastrar item</Text>
+            </TouchableOpacity>
+          </View>
         )}
 
         {/* CARROSSEL 2: PERDIDOS */}
@@ -325,12 +374,20 @@ export default function Home({ navigation }) {
           <Text style={[styles.sectionTitle, { color: colors.danger }]}>Objetos Perdidos</Text>
           <Text style={styles.sectionSubtitle}>Comunidade procurando</Text>
         </View>
-        {perdidos.length > 0 ? (
+        {isInitialLoading ? (
+          renderSkeletonRow()
+        ) : perdidos.length > 0 ? (
           <ScrollView horizontal showsHorizontalScrollIndicator={false} snapToInterval={CARD_WIDTH + CARD_GAP} decelerationRate="fast" snapToAlignment="start" contentContainerStyle={styles.carouselContainer}>
             {perdidos.map((item, index) => renderCarouselCard(item, index))}
           </ScrollView>
         ) : (
-          <View style={styles.emptyContainer}><Text style={styles.emptyText}>Nenhum item perdido.</Text></View>
+          <View style={styles.emptyContainer}>
+            <Text style={styles.emptyText}>Nenhum item perdido.</Text>
+            <TouchableOpacity style={styles.emptyCta} activeOpacity={0.8} onPress={() => navigation.navigate("cadastrar")}>
+              <Ionicons name="add-circle" size={14} color={colors.primaryDark} />
+              <Text style={styles.emptyCtaText}>Registrar item perdido</Text>
+            </TouchableOpacity>
+          </View>
         )}
 
         {/* CARROSSEL 3: ENCONTRADOS */}
@@ -338,12 +395,20 @@ export default function Home({ navigation }) {
           <Text style={[styles.sectionTitle, { color: colors.success }]}>Objetos Encontrados</Text>
           <Text style={styles.sectionSubtitle}>Aguardando o dono legítimo</Text>
         </View>
-        {achados.length > 0 ? (
+        {isInitialLoading ? (
+          renderSkeletonRow()
+        ) : achados.length > 0 ? (
           <ScrollView horizontal showsHorizontalScrollIndicator={false} snapToInterval={CARD_WIDTH + CARD_GAP} decelerationRate="fast" snapToAlignment="start" contentContainerStyle={styles.carouselContainer}>
             {achados.map((item, index) => renderCarouselCard(item, index))}
           </ScrollView>
         ) : (
-          <View style={styles.emptyContainer}><Text style={styles.emptyText}>Nenhum item encontrado.</Text></View>
+          <View style={styles.emptyContainer}>
+            <Text style={styles.emptyText}>Nenhum item encontrado.</Text>
+            <TouchableOpacity style={styles.emptyCta} activeOpacity={0.8} onPress={() => navigation.navigate("cadastrar")}>
+              <Ionicons name="add-circle" size={14} color={colors.primaryDark} />
+              <Text style={styles.emptyCtaText}>Registrar item achado</Text>
+            </TouchableOpacity>
+          </View>
         )}
 
         {/* CARROSSEL 4: DEVOLVIDOS */}
@@ -351,12 +416,14 @@ export default function Home({ navigation }) {
           <Text style={[styles.sectionTitle, { color: colors.info }]}>Devolvidos com Sucesso</Text>
           <Text style={styles.sectionSubtitle}>Casos solucionados</Text>
         </View>
-        {devolvidos.length > 0 ? (
+        {isInitialLoading ? (
+          renderSkeletonRow()
+        ) : devolvidos.length > 0 ? (
           <ScrollView horizontal showsHorizontalScrollIndicator={false} snapToInterval={CARD_WIDTH + CARD_GAP} decelerationRate="fast" snapToAlignment="start" contentContainerStyle={styles.carouselContainer}>
             {devolvidos.map((item, index) => renderCarouselCard(item, index))}
           </ScrollView>
         ) : (
-          <View style={styles.emptyContainer}><Text style={styles.emptyText}>Nenhum item devolvido.</Text></View>
+          <View style={styles.emptyContainer}><Text style={styles.emptyText}>Nenhum item devolvido ainda.</Text></View>
         )}
 
       </ScrollView>
@@ -463,8 +530,10 @@ const styles = StyleSheet.create({
   
   errorContainer: { flexDirection: "row", alignItems: "center", backgroundColor: "#fff5f5", borderColor: "#e8514a", borderWidth: 1, borderRadius: 12, padding: 12, marginHorizontal: 16, marginBottom: 12, gap: 8 },
   errorText: { color: "#e8514a", fontSize: 12, flex: 1, fontWeight: "500" },
-  emptyContainer: { alignItems: "center", paddingVertical: 16, backgroundColor: "#fff", marginHorizontal: 16, borderRadius: 16, borderWidth: 1, borderColor: "rgba(0,0,0,0.02)", width: CARD_WIDTH },
+  emptyContainer: { alignItems: "center", paddingVertical: 16, backgroundColor: "#fff", marginHorizontal: 16, borderRadius: 16, borderWidth: 1, borderColor: "rgba(0,0,0,0.02)", width: CARD_WIDTH, gap: 10 },
   emptyText: { color: colors.textLight, fontSize: 12, fontStyle: "italic" },
+  emptyCta: { flexDirection: "row", alignItems: "center", gap: 5, backgroundColor: "rgba(144,219,244,0.25)", paddingHorizontal: 12, paddingVertical: 7, borderRadius: 999 },
+  emptyCtaText: { fontSize: 11.5, fontWeight: "700", color: colors.primaryDark },
   searchRow: { flexDirection: "row", alignItems: "center", gap: 10 },
   cameraBtn: { width: 44, height: 44, borderRadius: 14, backgroundColor: "rgba(255,255,255,0.5)", alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "rgba(255,255,255,0.3)" },
 

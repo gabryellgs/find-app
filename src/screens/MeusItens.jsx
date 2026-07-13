@@ -7,6 +7,8 @@ import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useIsFocused } from "@react-navigation/native";
 import { fetchMyItems, deleteItem } from "../services/api";
+import Skeleton from "../components/ui/Skeleton";
+import haptics from "../services/haptics";
 
 const colors = {
   primary: "#90dbf4",
@@ -113,7 +115,9 @@ export default function MeusItens({ navigation }) {
             try {
               await deleteItem(item.id);
               setItems((prev) => prev.filter((i) => i.id !== item.id));
+              haptics.success();
             } catch (e) {
+              haptics.error();
               Alert.alert("Erro", e.message);
             }
           },
@@ -150,7 +154,7 @@ export default function MeusItens({ navigation }) {
           <TouchableOpacity
             key={f}
             style={[styles.filtroBtn, filtro === f && styles.filtroBtnActive]}
-            onPress={() => setFiltro(f)}
+            onPress={() => { haptics.tap(); setFiltro(f); }}
             activeOpacity={0.75}
           >
             <Text style={[styles.filtroText, filtro === f && styles.filtroTextActive]}>{f}</Text>
@@ -164,9 +168,16 @@ export default function MeusItens({ navigation }) {
       </Text>
 
       {loading ? (
-        <View style={styles.centered}>
-          <ActivityIndicator size="large" color={colors.primaryDark} />
-          <Text style={styles.loadingText}>Carregando seus itens...</Text>
+        <View style={styles.listContent}>
+          {[0, 1, 2, 3].map((i) => (
+            <View key={i} style={[styles.card, { padding: 14, gap: 8 }]}>
+              <View style={{ flex: 1, gap: 8 }}>
+                <Skeleton width="60%" height={15} />
+                <Skeleton width="90%" height={12} />
+                <Skeleton width="40%" height={11} />
+              </View>
+            </View>
+          ))}
         </View>
       ) : (
         <FlatList
