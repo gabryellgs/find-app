@@ -18,7 +18,7 @@ import {
 import * as ImagePicker from "expo-image-picker";
 import { useIsFocused } from "@react-navigation/native";
 import HomeHeader from "../components/home/HomeHeader";
-import SearchBar from "../components/search/SearchBar";
+import SearchBar from "../components/home/SearchBar";
 import CategoryList from "../components/home/CategoryList";
 import StatsRow from "../components/home/StatsRow";
 import { fetchItems } from "../services/api";
@@ -97,7 +97,7 @@ export default function Home({ navigation }) {
       : await ImagePicker.launchImageLibraryAsync({ allowsEditing: true, aspect: [1, 1], quality: 0.7 });
     if (!result.canceled && result.assets?.length > 0) {
       const uri = result.assets[0].uri;
-      navigation.navigate("Busca", { visualSearchImageUri: uri });
+      navigation.navigate("Buscar", { visualSearchImageUri: uri });
     }
   };
 

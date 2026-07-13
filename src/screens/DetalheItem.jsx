@@ -1,3 +1,4 @@
+import { useState, useEffect } from "react";
 import {
   View, Text, Image, StyleSheet, ScrollView,
   TouchableOpacity, StatusBar, ActivityIndicator, Alert, Modal, Share

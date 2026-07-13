@@ -159,7 +159,7 @@ export default function Notificacoes() {
     }
     // Navega se tiver link
     if (item.link?.includes("chats")) {
-      navigation.navigate("Chat");
+      navigation.navigate("main", { screen: "Chat" });
     }
   };
 

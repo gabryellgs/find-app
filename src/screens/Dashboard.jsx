@@ -243,7 +243,7 @@ export default function Dashboard({ navigation }) {
         style: "destructive",
         onPress: async () => {
           await auth.logout();
-          navigation.reset({ index: 0, routes: [{ name: "landing" }] });
+          (navigation.getParent() ?? navigation).reset({ index: 0, routes: [{ name: "landing" }] });
         },
       },
     ]);

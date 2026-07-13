@@ -52,7 +52,7 @@ function CategoryChip({ item, selected, onPress }) {
   );
 }
 
-function ItemCard({ item }) {
+function ItemCard({ item, onPress }) {
   const title = item.title || item.titulo || "Sem título";
   const location = item.location || item.local || "Não informado";
   const date = item.time || item.date || item.data || item.criado_em || "Data não informada";
@@ -89,7 +89,7 @@ function ItemCard({ item }) {
   const imageUrl = item.photo || item.imagem || item.photo_url || "https://images.unsplash.com/photo-1594322436404-5a0526db4d13?q=80&w=800&auto=format&fit=crop";
 
   return (
-    <TouchableOpacity style={styles.itemCard} activeOpacity={0.75}>
+    <TouchableOpacity style={styles.itemCard} activeOpacity={0.75} onPress={onPress}>
       <Image source={{ uri: imageUrl }} style={styles.itemImage} />
       <View style={styles.itemBody}>
         <View style={styles.itemRow}>
@@ -118,7 +118,7 @@ function ItemCard({ item }) {
   );
 }
 
-export default function Busca({ route }) {
+export default function Busca({ route, navigation }) {
   const [searchText, setSearchText] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [statusFiltro, setStatusFiltro] = useState("Todos");
@@ -384,7 +384,11 @@ export default function Busca({ route }) {
         ) : (
           <View style={styles.list}>
             {filtered.map((item) => (
-              <ItemCard key={item.id} item={item} />
+              <ItemCard
+                key={item.id}
+                item={item}
+                onPress={() => navigation.navigate("DetalheItem", { item, id: item.id })}
+              />
             ))}
           </View>
         )}
@@ -435,7 +439,15 @@ export default function Busca({ route }) {
               <>
                 <Text style={styles.visualCount}>{visualResults.length} item(ns) similar(es)</Text>
                 {visualResults.map((item) => (
-                  <View key={item.id} style={styles.visualCard}>
+                  <TouchableOpacity
+                    key={item.id}
+                    style={styles.visualCard}
+                    activeOpacity={0.8}
+                    onPress={() => {
+                      fecharBuscaVisual();
+                      navigation.navigate("DetalheItem", { item, id: item.id });
+                    }}
+                  >
                     <Image source={{ uri: item.imagem || "https://via.placeholder.com/80" }} style={styles.visualCardImg} />
                     <View style={styles.visualCardBody}>
                       <View style={styles.visualCardTop}>
@@ -455,7 +467,7 @@ export default function Busca({ route }) {
                         </Text>
                       </View>
                     </View>
-                  </View>
+                  </TouchableOpacity>
                 ))}
               </>
             )}
